@@ -8,6 +8,7 @@ Este árbol define los límites de cada desarrollador. Para mitigar el Riesgo R-
 
 ## 2. Árbol de Directorios Oficial
 
+```
 📦 frankie_gestor_grupal  
 │  
 ├── 📁 .venv/                       # Entorno virtual de Python  
@@ -50,4 +51,5 @@ Este árbol define los límites de cada desarrollador. Para mitigar el Riesgo R-
 ├── 📁 tests/                       # Entorno QA y Pruebas  
 │   └── 🧪 test_stock.py            # Automatización pytest (Triggers)  
 │  
-└── 🚀 main.py                      # Punto de entrada del sistema  
+└── 🚀 main.py                      # Punto de entrada del sistema 
+``` 
