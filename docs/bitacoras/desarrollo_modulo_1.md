@@ -80,5 +80,26 @@ Para los desarrolladores (Alicia y Uriel) encargados de replicar esta lógica en
 2.  **Prohibición de Imports de Infraestructura/UI:** Queda terminantemente prohibido utilizar sentencias como `import sqlite3`, `import tkinter` o librerías de terceros en esta capa. 
 3.  **Separación de Responsabilidades:** Toda lógica relacionada a guardar en la base de datos o dibujar botones en la pantalla corresponde a los repositorios y a las vistas, respectivamente. El dominio es ignorante de cómo se guarda o cómo se muestra la información.
 
+## 5. Capa de Infraestructura: Repositorio Core (Semana 2)
+
+**Archivo:** `src/infraestructura/repo_core.py`
+**Objetivo:** Centralizar las consultas a la base de datos para la autenticación, transformando registros crudos en Entidades limpias.
+
+### 5.1 ¿Qué es y cómo funciona el Repositorio?
+El Repositorio actúa como un traductor entre SQLite y nuestro sistema. La base de datos responde con registros puros (filas y columnas), pero nuestra aplicación en Python trabaja con objetos. El trabajo del Repositorio es ir a la base, buscar la información cruda, y empaquetarla dentro del "molde" (Entidad) que creamos en el paso anterior.
+
+*Ejemplo:* Imaginate pedir un mueble. La base de datos te entrega una caja con maderas y tornillos. El Repositorio es el operario que lee el manual, ensambla la silla (la Entidad) y se la entrega armada a la interfaz gráfica.
+
+### 5.2 Especificaciones Técnicas Implementadas
+*   **Hashing de Contraseñas (SHA-256):** Es un mecanismo de seguridad unidireccional. Pasa la contraseña por una función criptográfica que devuelve un código extenso e irrecuperable (no se puede desencriptar). Para validar un login, el sistema aplica este algoritmo a lo que tipea el usuario y lo compara con el código seguro almacenado en la base de datos.
+*   **Prevención de Inyección SQL (`?`):** Para evitar que un usuario malicioso ingrese comandos SQL en el formulario y manipule la base de datos, las consultas se parametrizan. El motor de SQLite sanitiza automáticamente cualquier variable que se pase a través del símbolo `?`.
+
+### 5.3 Directivas Estrictas para el Equipo (Módulos 2, 3 y 4)
+Al momento de crear sus propios repositorios (`repo_rrhh.py`, `repo_ventas.py`, `repo_stock.py`), Uriel y Alicia deben acatar estas tres reglas innegociables:
+
+1.  **Regla de Retorno (Cero datos crudos):** Los métodos del repositorio jamás deben devolver diccionarios, tuplas o listas sueltas. Toda función (ej. `buscar_cliente()`) debe instanciar y retornar su Entidad correspondiente (ej. un objeto `Cliente`).
+2.  **Parametrización Obligatoria:** Queda estrictamente prohibido usar `f-strings` o concatenación con `+` para inyectar variables en las sentencias SQL. Deben usar siempre tuplas y el símbolo `?` para prevenir vulnerabilidades de seguridad.
+3.  **Cero Interfaz Gráfica:** El Repositorio ignora por completo a Tkinter. Si ocurre un error (ej. "proveedor no existe"), el repositorio no hace `print()` ni lanza ventanas emergentes. Simplemente devuelve `None` o levanta un error técnico (ej. `raise ValueError`), delegando a la capa visual la responsabilidad de mostrar el aviso al usuario.
+
 ---
 *(Los siguientes apartados se irán completando a medida que desarrollemos cada componente de la Infraestructura y el Módulo 1).*
