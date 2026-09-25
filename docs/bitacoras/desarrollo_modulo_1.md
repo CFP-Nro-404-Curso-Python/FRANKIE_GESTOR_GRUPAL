@@ -60,6 +60,25 @@ def obtener_usuarios_activos():
 
     # Al salir de la indentación del 'with', se ejecuta el commit automáticamente.
     # No es necesario cerrar la conexión (db.close()).
+```
+## 4. Capa de Dominio: Entidades Core (Semana 2)
+
+**Archivo:** `src/dominio/entidades_core.py`
+**Objetivo:** Definir las estructuras de datos puras (Entidades) que representarán a los Usuarios y Roles dentro de la memoria temporal del sistema.
+
+### 4.1 ¿Qué es una Entidad en nuestro diseño?
+En la Capa de Dominio, las Entidades funcionan como "moldes". La clase `Usuario` no es un registro directo de la base de datos ni un elemento visual de la pantalla; es la definición estricta de qué estructura debe tener un usuario. Cuando el sistema recupera datos mediante SQL, instancia este "molde" a través del método `__init__` y lo pasa a las demás capas como un objeto ordenado.
+
+### 4.2 Especificaciones Técnicas Implementadas
+*   **Type Hinting (Pistas de tipado):** Se aplicó el uso de anotaciones (ej. `id_usuario: int`, `username: str`). Aunque en Python no son restrictivas a nivel de compilación, sirven como documentación viva. Le avisan al entorno de desarrollo y a los demás programadores qué tipo de dato específico se espera, reduciendo drásticamente los errores de tipeo.
+*   **Mapeo de Relaciones (Muchos a Muchos):** Para representar en memoria la tabla intermedia `usuarios_roles`, la entidad `Usuario` inicializa el atributo `self.roles` como una lista vacía (`[]`). Posteriormente, el controlador correspondiente buscará los roles asignados y los inyectará usando el método `agregar_rol()`.
+
+### 4.3 Directiva Arquitectónica para el Equipo (Regla de Aislamiento)
+Para los desarrolladores (Alicia y Uriel) encargados de replicar esta lógica en sus respectivos módulos (`entidades_rrhh.py`, `entidades_ventas.py`, `entidades_stock.py`), es obligatorio cumplir con la **Regla de Aislamiento Total**:
+
+1.  **Cero Dependencias:** Los archivos dentro de la carpeta `dominio` son islas de lógica. Solo admiten Python puro.
+2.  **Prohibición de Imports de Infraestructura/UI:** Queda terminantemente prohibido utilizar sentencias como `import sqlite3`, `import tkinter` o librerías de terceros en esta capa. 
+3.  **Separación de Responsabilidades:** Toda lógica relacionada a guardar en la base de datos o dibujar botones en la pantalla corresponde a los repositorios y a las vistas, respectivamente. El dominio es ignorante de cómo se guarda o cómo se muestra la información.
 
 ---
 *(Los siguientes apartados se irán completando a medida que desarrollemos cada componente de la Infraestructura y el Módulo 1).*
