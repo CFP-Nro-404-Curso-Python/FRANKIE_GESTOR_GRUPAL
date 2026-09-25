@@ -101,5 +101,27 @@ Al momento de crear sus propios repositorios (`repo_rrhh.py`, `repo_ventas.py`, 
 2.  **Parametrización Obligatoria:** Queda estrictamente prohibido usar `f-strings` o concatenación con `+` para inyectar variables en las sentencias SQL. Deben usar siempre tuplas y el símbolo `?` para prevenir vulnerabilidades de seguridad.
 3.  **Cero Interfaz Gráfica:** El Repositorio ignora por completo a Tkinter. Si ocurre un error (ej. "proveedor no existe"), el repositorio no hace `print()` ni lanza ventanas emergentes. Simplemente devuelve `None` o levanta un error técnico (ej. `raise ValueError`), delegando a la capa visual la responsabilidad de mostrar el aviso al usuario.
 
+## 6. Capa de Vistas: Interfaz de Autenticación (Semana 2)
+
+**Archivo:** `src/vistas/ui_login.py`
+**Objetivo:** Renderizar la pantalla de ingreso al sistema y gestionar las reglas de seguridad visuales (bloqueo tras 3 intentos fallidos).
+
+### 6.1 El Rol de la Vista en Clean Architecture
+La Vista es la interfaz gráfica (construida con Tkinter) y su única responsabilidad es interactuar con el usuario: dibuja ventanas, botones, y escucha eventos (clicks, tipeos). Las Vistas son "tontas" por diseño; no toman decisiones de negocio ni saben de dónde vienen o cómo se almacenan los datos.
+
+*Ejemplo Práctico:* La Vista funciona como el recepcionista de un edificio cerrado. Cuando llegás, te pide tu DNI. El recepcionista no tiene la lista de inquilinos; llama por teléfono al guardia de seguridad (el Repositorio/Controlador) y le pregunta. Si el guardia dice "dejalo pasar", te abre la puerta. Si dice que no, te avisa que el ingreso está denegado.
+
+### 6.2 Especificaciones Técnicas Implementadas
+*   **Enmascaramiento de Seguridad (`show="*"`):** El componente `tk.Entry` destinado a la contraseña se configuró para ocultar los caracteres tipeados detrás de asteriscos, una medida básica pero vital para evitar la exposición de credenciales.
+*   **Estado Persistente en Memoria (`self.intentos_fallidos`):** Se utilizó una variable de instancia (usando `self`) para llevar el conteo de errores. Como la ventana queda abierta esperando interacción, esta variable mantiene vivo el conteo en la memoria RAM hasta llegar al límite, momento en el que se ejecuta `config(state=tk.DISABLED)` para apagar el botón.
+*   **Asignación de Eventos (`command`):** La acción del botón se vinculó mediante `command=self.procesar_login` (sin paréntesis). Esto es crucial en Tkinter: le indica al motor gráfico que guarde la referencia a la función y la ejecute únicamente al hacer click, en lugar de ejecutarla automáticamente al abrir el programa.
+
+### 6.3 Directivas Arquitectónicas para el Equipo (UI)
+Tkinter es propenso a generar "código espagueti" si no se estructura correctamente. Al desarrollar pantallas como `ui_empleados.py` o `ui_inventario.py`, Alicia y Uriel deben acatar estas tres reglas de hierro:
+
+1.  **Regla de Ignorancia (Cero Base de Datos):** Queda terminantemente prohibido hacer un `import sqlite3` o ejecutar consultas SQL (ej. `SELECT`) en la carpeta `vistas`. La Vista no sabe cómo se guardan los datos, solo los pide a las capas inferiores y los dibuja.
+2.  **Diseño Orientado a Objetos (Clases obligatorias):** No se debe escribir código Tkinter suelto en el archivo. Toda pantalla nueva debe estar encapsulada en una Clase (`class VentanaInventario:`). Esto aísla el entorno y evita que las variables de una ventana choquen con las de otra.
+3.  **Separar Dibujo de Lógica:** Las clases visuales deben tener un método dedicado exclusivamente a colocar botones y etiquetas (ej. `_dibujar_interfaz()`), y métodos completamente separados para ejecutar acciones (ej. `guardar_cliente()`). Mezclar la creación del botón con la lógica del guardado en el mismo bloque hace que el código sea inmantenible.
+
 ---
 *(Los siguientes apartados se irán completando a medida que desarrollemos cada componente de la Infraestructura y el Módulo 1).*
