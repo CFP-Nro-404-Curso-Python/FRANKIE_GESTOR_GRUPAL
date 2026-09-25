@@ -10,6 +10,7 @@ class Rol:
         self.descripcion = descripcion
 
 
+
 class Usuario:
     """
     Molde (Entidad) que representa a quien inicia sesión en el sistema.
@@ -28,6 +29,7 @@ class Usuario:
     def agregar_rol(self, rol: Rol):
         """Método simple para añadir un objeto Rol a la lista del usuario."""
         self.roles.append(rol)
+
 
 
 # ==============================================================================================
