@@ -1,4 +1,4 @@
-# 1. desarrollo_modulo_2
+1. desarrollo_modulo_2
 ## 1. `src/dominio/entidades_rrhh.py`
 **Propósito:** Definir el modelo de objetos y la lógica de negocio del módulo de Recursos Humanos.
 **Descripción:** Archivo del dominio que contiene la definición de la clase base `Persona` y la clase derivada `Empleado` (mediante herencia). Encapsula los atributos de datos personales y laborales, así como las validaciones asociadas a la gestión del personal.
@@ -19,7 +19,18 @@
 - Renderizar los formularios de captura de datos (nombre, CUIT, legajo, sueldo, etc.).        
 - Invocar los métodos del `repo_rrhh.py` para guardar o consultar información sin incluir lógica directa de base de datos ni SQL.
 - Mostrar mensajes de éxito o error al usuario.
-# 2. Otros puntos de interés
+
+# 2. Mejoras en la gestión del Módulo 2
+- **Validación estricta de CUIT/CUIL**: Se restringe la entrada a **exactamente 11 dígitos numéricos**. Si se ingresa una cantidad distinta (por ejemplo, un DNI de 8 dígitos), el sistema bloquea el registro.
+
+- **Formateo de visualización**: En las tablas y campos se muestra formateado automáticamente con guiones (`XX-XXXXXXXX-X`), manteniendo la búsqueda limpia en la base de datos.
+
+- **Legajo automático**: El campo de legajo queda en modo **solo lectura** o autogenerado por el sistema (`EMP-001`, `EMP-002`, etc.) sin requerir la intervención manual del usuario.
+
+- **Todos los campos obligatorios**: Antes de procesar el guardado, se valida que ningún campo quede vacío (`CUIT/CUIL`, `Nombres`, `Apellidos`, `Cargo`, `Sector`, `Sueldo`, `Email`, `Teléfono`).
+    
+- **Visualización completa para el Gerente**: Se incorporan las columnas de `Email` y `Teléfono` directamente en la vista del listado (`Treeview`) para que el gerente disponga de toda la información de contacto de un solo vistazo.
+# 3. Otros puntos de interés
 1. En `esquema.sql`, el bloque  SEMILLAS (Datos Iniciales Obligatorios) se cambió INSERT INTO por INSERT OR IGNORE INTO (roles, usuarios y usuarios_roles)
 2. Se creó el archivo de prueba temporal `test_rrhh.py` para testear el funcionamiento de los entregables.
 3. En el CRUD, se implementa la baja lógica (Activado-Desactivado) en vez de la baja definitiva (Eliminar)

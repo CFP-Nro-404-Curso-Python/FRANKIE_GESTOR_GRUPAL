@@ -9,10 +9,6 @@ from dominio.entidades_rrhh import Empleado
 
 
 def _obtener_conexion_segura():
-    """
-    Función auxiliar para obtener la conexión a la base de datos
-    independientemente de la implementación exacta en ConexionDB.
-    """
     if hasattr(ConexionDB, "obtener_conexion"):
         return ConexionDB.obtener_conexion()
     elif hasattr(ConexionDB, "get_connection"):
@@ -34,10 +30,50 @@ def _obtener_conexion_segura():
 class RepositorioRRHH:
 
     @staticmethod
+    def asegurar_columna_activo():
+        """ Asegura que la columna 'activo' exista en la tabla empleados. """
+        conn = _obtener_conexion_segura()
+        cursor = conn.cursor()
+        try:
+            cursor.execute("PRAGMA table_info(empleados)")
+            columnas = [col[1] for col in cursor.fetchall()]
+            if "activo" not in columnas:
+                cursor.execute(
+                    "ALTER TABLE empleados ADD COLUMN activo INTEGER DEFAULT 1")
+                conn.commit()
+        except Exception as e:
+            print(f"Error al verificar/crear columna 'activo': {e}")
+
+    @staticmethod
+    def existe_documento(nro_documento: str,
+                         id_persona_actual: int = None) -> bool:
+        """
+        Verifica si un CUIT/CUIL de 11 dígitos ya está registrado en la base de datos.
+        Si se le pasa 'id_persona_actual', ignora el registro del propio empleado que se está editando.
+        """
+        conn = _obtener_conexion_segura()
+        cursor = conn.cursor()
+        doc_limpio = "".join(c for c in str(nro_documento) if c.isdigit())
+        try:
+            if id_persona_actual:
+                cursor.execute("""
+                    SELECT 1 FROM personas 
+                    WHERE REPLACE(REPLACE(nro_documento, '-', ''), ' ', '') = ?
+                    AND id <> ?
+                """, (doc_limpio, id_persona_actual))
+            else:
+                cursor.execute("""
+                    SELECT 1 FROM personas 
+                    WHERE REPLACE(REPLACE(nro_documento, '-', ''), ' ', '') = ?
+                """, (doc_limpio,))
+            return cursor.fetchone() is not None
+        except Exception as e:
+            print(f"Error al verificar duplicado de documento: {e}")
+            return False
+
+    @staticmethod
     def generar_siguiente_legajo() -> str:
-        """
-        Calcula y retorna el siguiente legajo en formato 'EMP-XXX' (ej. EMP-001).
-        """
+        """ Genera automáticamente la secuencia de legajos EMP-001, EMP-002, etc. """
         conn = _obtener_conexion_segura()
         cursor = conn.cursor()
         try:
@@ -47,19 +83,16 @@ class RepositorioRRHH:
             siguiente_num = ultimo_id + 1
             return f"EMP-{siguiente_num:03d}"
         except Exception as e:
-            print(f"Error al calcular el siguiente legajo: {e}")
+            print(f"Error al calcular legajo: {e}")
             return "EMP-001"
 
     @staticmethod
     def crear_empleado(empleado: Empleado) -> bool:
-        """
-        Inserta una nueva Persona y su correspondiente Empleado en una transacción atómica.
-        """
+        RepositorioRRHH.asegurar_columna_activo()
         conn = _obtener_conexion_segura()
         cursor = conn.cursor()
 
         try:
-            # 1. Insertar en la tabla 'personas'
             query_persona = """
             INSERT INTO personas (
                 tipo_persona, nombres, apellidos, razon_social, tipo_documento,
@@ -83,11 +116,10 @@ class RepositorioRRHH:
 
             id_persona_insertada = cursor.lastrowid
 
-            # 2. Insertar en la tabla 'empleados'
             query_empleado = """
             INSERT INTO empleados (
-                id_persona, id_usuario, legajo, cargo, sector, sueldo
-            ) VALUES (?, ?, ?, ?, ?, ?)
+                id_persona, id_usuario, legajo, cargo, sector, sueldo, activo
+            ) VALUES (?, ?, ?, ?, ?, ?, 1)
             """
             cursor.execute(query_empleado, (
                 id_persona_insertada,
@@ -100,22 +132,17 @@ class RepositorioRRHH:
 
             conn.commit()
             return True
-
         except Exception as e:
             conn.rollback()
-            print(f"Error al crear el empleado en la BD: {e}")
+            print(f"Error al crear empleado: {e}")
             return False
 
     @staticmethod
     def actualizar_empleado(empleado: Empleado) -> bool:
-        """
-        Actualiza los datos del empleado y su correspondiente registro de Persona.
-        """
         conn = _obtener_conexion_segura()
         cursor = conn.cursor()
 
         try:
-            # 1. Actualizar tabla 'personas'
             query_persona = """
             UPDATE personas
             SET nombres = ?, apellidos = ?, nro_documento = ?, telefono = ?, email = ?
@@ -130,7 +157,6 @@ class RepositorioRRHH:
                 empleado.id
             ))
 
-            # 2. Actualizar tabla 'empleados'
             query_empleado = """
             UPDATE empleados
             SET legajo = ?, cargo = ?, sector = ?, sueldo = ?
@@ -148,51 +174,52 @@ class RepositorioRRHH:
             return True
         except Exception as e:
             conn.rollback()
-            print(f"Error al actualizar el empleado en la BD: {e}")
+            print(f"Error al actualizar empleado: {e}")
             return False
 
     @staticmethod
-    def deshabilitar_empleado(id_empleado: int) -> bool:
-        """
-        Realiza la Baja Lógica o deshabilitación del empleado.
-        """
+    def cambiar_estado_empleado(id_empleado: int, nuevo_estado: int) -> bool:
+        """ Cambia el estado 'activo' del empleado (1 = Activo, 0 = Inactivo). """
+        RepositorioRRHH.asegurar_columna_activo()
         conn = _obtener_conexion_segura()
         cursor = conn.cursor()
 
         try:
-            # Revisa de forma defensiva si existe columna 'activo' o realiza baja
-            query = "UPDATE empleados SET cargo = 'DESHABILITADO' WHERE id = ?"
-            cursor.execute(query, (id_empleado,))
+            cursor.execute("UPDATE empleados SET activo = ? WHERE id = ?",
+                           (nuevo_estado, id_empleado))
             conn.commit()
             return True
         except Exception as e:
             conn.rollback()
-            print(f"Error al deshabilitar el empleado: {e}")
+            print(f"Error al cambiar estado del empleado: {e}")
             return False
 
     @staticmethod
-    def listar_empleados(criterio_busqueda: str = ""):
-        """
-        Retorna la lista consolidada de empleados, opcionalmente filtrada por un criterio.
-        """
+    def listar_empleados(criterio_busqueda: str = "",
+                         incluir_inactivos: bool = False):
+        RepositorioRRHH.asegurar_columna_activo()
         conn = _obtener_conexion_segura()
         cursor = conn.cursor()
 
         query = """
         SELECT e.id, p.id, p.nro_documento, p.nombres, p.apellidos,
-               e.legajo, e.cargo, e.sector, e.sueldo, p.email, p.telefono
+               e.legajo, e.cargo, e.sector, e.sueldo, p.email, p.telefono,
+               COALESCE(e.activo, 1) as activo
         FROM empleados e
         JOIN personas p ON e.id_persona = p.id
         WHERE 1=1
         """
 
         parametros = []
+        if not incluir_inactivos:
+            query += " AND COALESCE(e.activo, 1) = 1"
+
         if criterio_busqueda:
             query += """
-            AND (p.nombres LIKE ? OR p.apellidos LIKE ? OR e.legajo LIKE ? OR p.nro_documento LIKE ?)
+            AND (p.nombres LIKE ? OR p.apellidos LIKE ? OR e.legajo LIKE ? OR p.nro_documento LIKE ? OR p.email LIKE ? OR p.telefono LIKE ?)
             """
             patron = f"%{criterio_busqueda}%"
-            parametros = [patron, patron, patron, patron]
+            parametros.extend([patron, patron, patron, patron, patron, patron])
 
         query += " ORDER BY e.id ASC"
 
@@ -215,6 +242,7 @@ class RepositorioRRHH:
                     email=f[9],
                     telefono=f[10]
                 )
+                emp.activo = bool(f[11])
                 lista_empleados.append(emp)
 
             return lista_empleados
