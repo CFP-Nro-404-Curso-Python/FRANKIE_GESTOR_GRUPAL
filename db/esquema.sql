@@ -180,19 +180,18 @@ BEGIN
 END;
 
 
-
 -- =========================================
 --  SEMILLAS (Datos Iniciales Obligatorios)
 -- =========================================
 
-INSERT INTO roles (nombre, descripcion) VALUES 
+INSERT OR IGNORE INTO roles (nombre, descripcion) VALUES
 ('Administrador', 'Control total del sistema'),
 ('Gerente', 'Gestión operativa sin acceso a roles superiores'),
 ('Empleado - Ventas', 'Acceso a clientes y facturación'),
 ('Empleado - Compras', 'Acceso a proveedores y stock');
 
-INSERT INTO usuarios (username, password, activo) VALUES 
+INSERT OR IGNORE INTO usuarios (username, password, activo) VALUES
 ('admin', 'admin123', 1);
 
 -- Vinculamos al usuario admin (ID 1) con el rol Administrador (ID 1).
-INSERT INTO usuarios_roles (id_usuario, id_rol) VALUES (1, 1);
+INSERT OR IGNORE INTO usuarios_roles (id_usuario, id_rol) VALUES (1, 1);
