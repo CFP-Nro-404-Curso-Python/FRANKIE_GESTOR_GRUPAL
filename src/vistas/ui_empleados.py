@@ -213,8 +213,8 @@ class ModuloEmpleadosUI(ttk.Frame):
         self.tabla.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
 
-        # Doble clic en fila para cargar en formulario
-        self.tabla.bind("<Double-1>", self._al_seleccionar_fila)
+        # Evento de selección nativo para cargar datos en tiempo real al hacer clic
+        self.tabla.bind("<<TreeviewSelect>>", self._al_seleccionar_fila)
 
     def _al_perder_foco_documento(self, event=None):
         doc_actual = self.var_documento.get().strip()
@@ -234,10 +234,11 @@ class ModuloEmpleadosUI(ttk.Frame):
         if not valores:
             return
 
-        id_emp = valores[0]
-        empleados = RepositorioRRHH.listar_empleados()
+        id_emp = str(valores[0])
+        empleados = RepositorioRRHH.listar_empleados(
+            criterio_busqueda=self.var_busqueda.get().strip())
         emp_encontrado = next(
-            (e for e in empleados if str(e.id_empleado) == str(id_emp)), None)
+            (e for e in empleados if str(e.id_empleado) == id_emp), None)
 
         if emp_encontrado:
             self.empleado_seleccionado_id = emp_encontrado.id_empleado
@@ -306,7 +307,7 @@ class ModuloEmpleadosUI(ttk.Frame):
 
         confirmar = messagebox.askyesno(
             "Confirmar Baja Lógica",
-            "¿Está seguro de que desea deshabilitar este empleado?\nEl registro permanecerá en la base de datos pero no se mostrará en los listados activos."
+            "¿Está seguro de que desea deshabilitar este empleado?\nEl registro se marcará como inactivo en la base de datos."
         )
 
         if confirmar:

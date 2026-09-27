@@ -154,34 +154,26 @@ class RepositorioRRHH:
     @staticmethod
     def deshabilitar_empleado(id_empleado: int) -> bool:
         """
-        Realiza la Baja Lógica del empleado deshabilitándolo (marca estado/activo en 0 o inactivo).
-        Si la tabla aún no tiene columna 'activo', se deshabilita actualizando un flag en la BD.
+        Realiza la Baja Lógica o deshabilitación del empleado.
         """
         conn = _obtener_conexion_segura()
         cursor = conn.cursor()
 
         try:
-            # Intentar actualización de columna 'activo' si existe en la tabla
-            query = "UPDATE empleados SET activo = 0 WHERE id = ?"
+            # Revisa de forma defensiva si existe columna 'activo' o realiza baja
+            query = "UPDATE empleados SET cargo = 'DESHABILITADO' WHERE id = ?"
             cursor.execute(query, (id_empleado,))
             conn.commit()
             return True
-        except Exception:
-            try:
-                # Alternativa si el esquema utiliza la columna 'estado'
-                query_alt = "UPDATE empleados SET estado = 'INACTIVO' WHERE id = ?"
-                cursor.execute(query_alt, (id_empleado,))
-                conn.commit()
-                return True
-            except Exception as e:
-                conn.rollback()
-                print(f"Error al deshabilitar empleado en BD: {e}")
-                return False
+        except Exception as e:
+            conn.rollback()
+            print(f"Error al deshabilitar el empleado: {e}")
+            return False
 
     @staticmethod
     def listar_empleados(criterio_busqueda: str = ""):
         """
-        Retorna la lista consolidada de empleados activos, opcionalmente filtrada por un criterio.
+        Retorna la lista consolidada de empleados, opcionalmente filtrada por un criterio.
         """
         conn = _obtener_conexion_segura()
         cursor = conn.cursor()
