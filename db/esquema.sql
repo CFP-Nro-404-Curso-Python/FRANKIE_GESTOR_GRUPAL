@@ -48,7 +48,7 @@ CREATE TABLE IF NOT EXISTS personas (
     ciudad TEXT,
     provincia TEXT,
     codigo_postal TEXT,
-    
+
     -- Restricción a nivel de motor: Valida que la estructura de los datos coincida con el tipo de persona.
     CONSTRAINT chk_tipo_persona CHECK (
         (tipo_persona = 'Fisica' AND nombres IS NOT NULL AND apellidos IS NOT NULL AND razon_social IS NULL) OR
@@ -82,11 +82,13 @@ CREATE TABLE IF NOT EXISTS proveedores (
 CREATE TABLE IF NOT EXISTS empleados (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     id_persona INTEGER NOT NULL UNIQUE,
-    id_usuario INTEGER UNIQUE, 
+    id_usuario INTEGER UNIQUE,
     legajo TEXT NOT NULL UNIQUE,
-    cargo TEXT NOT NULL,
-    sector TEXT NOT NULL,
+    cargo TEXT NOT NULL CHECK (cargo IN ('Gerente', 'Administrador', 'Empleado_Admin', 'Empleado_Ventas', 'Empleado_Compras')),
+    sector TEXT NOT NULL CHECK (sector IN ('Gestión', 'Staff', 'Ventas', 'Compras', 'Administración')),
+    tipo_vinculo TEXT NOT NULL CHECK (tipo_vinculo IN ('Propietario', 'Contratado', 'Pasante', 'Planta')),
     sueldo REAL NOT NULL, -- SQLite usa REAL para punto flotante (DECIMAL).
+    activo INTEGER DEFAULT 1,
     FOREIGN KEY (id_persona) REFERENCES personas(id) ON DELETE CASCADE,
     FOREIGN KEY (id_usuario) REFERENCES usuarios(id) ON DELETE SET NULL
 );
@@ -98,7 +100,7 @@ CREATE TABLE IF NOT EXISTS productos (
     codigo TEXT NOT NULL UNIQUE,
     descripcion TEXT NOT NULL,
     categoria TEXT,
-    id_proveedor INTEGER NOT NULL, 
+    id_proveedor INTEGER NOT NULL,
     stock_actual INTEGER NOT NULL DEFAULT 0,
     stock_minimo INTEGER NOT NULL DEFAULT 5,
     precio_costo REAL NOT NULL,
@@ -113,7 +115,7 @@ CREATE TABLE IF NOT EXISTS facturas (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     fecha DATETIME DEFAULT CURRENT_TIMESTAMP,
     id_cliente INTEGER NOT NULL,
-    id_vendedor INTEGER NOT NULL, 
+    id_vendedor INTEGER NOT NULL,
     total REAL DEFAULT 0.00,
     FOREIGN KEY (id_cliente) REFERENCES clientes(id) ON DELETE RESTRICT,
     FOREIGN KEY (id_vendedor) REFERENCES empleados(id) ON DELETE RESTRICT
@@ -145,7 +147,7 @@ BEFORE INSERT ON facturas_detalles
 FOR EACH ROW
 BEGIN
     -- Forzamos la actualización del NEW.subtotal con el cálculo matemático.
-    UPDATE facturas_detalles 
+    UPDATE facturas_detalles
     SET subtotal = (NEW.cantidad * NEW.precio_unitario) * (1 - (NEW.descuento_porcentaje / 100))
     WHERE id = NEW.id; -- Nota: En el paso BEFORE de SQLite, a veces hay que usar un enfoque lógico desde la app, pero este trigger asegura el cálculo a nivel BD.
 END;
@@ -164,8 +166,8 @@ CREATE TRIGGER IF NOT EXISTS trg_descontar_stock
 AFTER INSERT ON facturas_detalles
 FOR EACH ROW
 BEGIN
-    UPDATE productos 
-    SET stock_actual = stock_actual - NEW.cantidad 
+    UPDATE productos
+    SET stock_actual = stock_actual - NEW.cantidad
     WHERE id = NEW.id_producto;
 END;
 
@@ -174,25 +176,24 @@ CREATE TRIGGER IF NOT EXISTS trg_sumar_total_factura
 AFTER INSERT ON facturas_detalles
 FOR EACH ROW
 BEGIN
-    UPDATE facturas 
-    SET total = total + NEW.subtotal 
+    UPDATE facturas
+    SET total = total + NEW.subtotal
     WHERE id = NEW.id_factura;
 END;
-
 
 
 -- =========================================
 --  SEMILLAS (Datos Iniciales Obligatorios)
 -- =========================================
 
-INSERT INTO roles (nombre, descripcion) VALUES 
+INSERT OR IGNORE INTO roles (nombre, descripcion) VALUES
 ('Administrador', 'Control total del sistema'),
 ('Gerente', 'Gestión operativa sin acceso a roles superiores'),
 ('Empleado - Ventas', 'Acceso a clientes y facturación'),
 ('Empleado - Compras', 'Acceso a proveedores y stock');
 
-INSERT INTO usuarios (username, password, activo) VALUES 
+INSERT OR IGNORE INTO usuarios (username, password, activo) VALUES
 ('admin', 'admin123', 1);
 
 -- Vinculamos al usuario admin (ID 1) con el rol Administrador (ID 1).
-INSERT INTO usuarios_roles (id_usuario, id_rol) VALUES (1, 1);
+INSERT OR IGNORE INTO usuarios_roles (id_usuario, id_rol) VALUES (1, 1);
