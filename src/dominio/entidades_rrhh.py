@@ -1,84 +1,80 @@
 """
-Módulo de Dominio: Entidades de Recursos Humanos
-Define las clases Persona (superclase) y Empleado (subclase) alineadas al esquema oficial de Frankie.
+===============================================================================
+MÓDULO DE DOMINIO: ENTIDADES DE RRHH (entidades_rrhh.py)
+===============================================================================
+Estrategia y Buenas Prácticas Aplicadas:
+1. Listas de Opciones Validadas (Enumerados de Negocio):
+   Definición centralizada de SECTORES, TIPOS_VINCULO y CARGOS para poblar
+   la UI y asegurar que no ingresen valores fuera de regla.
+
+2. Opciones de Descarte (Fallback Defensivo):
+   Si un campo obligatorio llega vacío o inválido, la entidad asigna automáticamente
+   un valor por defecto seguro (Administración, Planta, Empleado_Admin).
+
+3. Encapsulamiento de Reglas de Negocio:
+   Métodos explícitos en la entidad para evaluar requerimientos tributarios/facturación.
+===============================================================================
 """
+
+from typing import Optional
+
+# Listas fijas reutilizables por la UI y el Dominio
+TIPOS_VINCULO = ["Propietario", "Contratado", "Pasante", "Planta"]
+SECTORES = ["Gestión", "Staff", "Ventas", "Compras", "Administración"]
+CARGOS = ["Gerente", "Administrador", "Empleado_Admin", "Empleado_Ventas", "Empleado_Compras"]
 
 
 def limpiar_documento(doc: str) -> str:
-    """
-    Elimina guiones, puntos y espacios, dejando únicamente los caracteres numéricos.
-    """
+    """ Sanitiza la cadena del documento eliminando guiones y espacios vacíos. """
     if not doc:
         return ""
-    return "".join(caracter for caracter in str(doc) if caracter.isdigit())
+    return str(doc).replace("-", "").replace(" ", "").strip()
 
 
 class Persona:
-    """
-    Clase base que representa a una persona dentro del sistema.
-    Coincide con la estructura de la tabla 'personas'.
-    """
+    """ Entidad Base de Dominio para representar a una persona física o jurídica. """
 
-    def __init__(self, nro_documento, nombres, apellidos=None,
-                 tipo_documento="CUIT",
-                 tipo_persona="Fisica", email=None, telefono=None,
-                 razon_social=None,
-                 domicilio=None, ciudad=None, provincia=None,
-                 codigo_postal=None, id=None):
-        self.id = id
-        self.tipo_persona = tipo_persona
-        self.nombres = nombres
-        self.apellidos = apellidos
-        self.razon_social = razon_social
-        self.tipo_documento = tipo_documento
-        # Sanitización: Guarda solo los números del CUIT/DNI
+    def __init__(self, id_persona: Optional[int] = None, nro_documento: str = "",
+                 nombres: str = "", apellidos: str = "", email: str = "", telefono: str = ""):
+        self.id = id_persona
         self.nro_documento = limpiar_documento(nro_documento)
-        self.telefono = telefono
-        self.email = email
-        self.domicilio = domicilio
-        self.ciudad = ciudad
-        self.provincia = provincia
-        self.codigo_postal = codigo_postal
-
-    def obtener_nombre_completo(self):
-        """Retorna el nombre completo o la razón social."""
-        if self.tipo_persona == "Fisica" and self.apellidos:
-            return f"{self.apellidos}, {self.nombres}"
-        return self.razon_social or self.nombres
+        self.nombres = nombres.strip()
+        self.apellidos = apellidos.strip()
+        self.email = email.strip()
+        self.telefono = telefono.strip()
+        self.tipo_persona = "FISICA"  # Exigido por restricción CHECK en BD
 
 
 class Empleado(Persona):
-    """
-    Clase derivada que representa a un empleado de la empresa.
-    Hereda de Persona y suma atributos laborales según la BD.
-    """
+    """ Entidad de Dominio que representa a un trabajador dentro de la organización. """
 
-    def __init__(self, nro_documento, nombres, legajo, cargo, sector, sueldo,
-                 apellidos=None, id_usuario=None, tipo_documento="CUIT",
-                 email=None,
-                 telefono=None, domicilio=None, ciudad=None, provincia=None,
-                 codigo_postal=None, id_empleado=None, id_persona=None):
-        super().__init__(
-            nro_documento=nro_documento,
-            nombres=nombres,
-            apellidos=apellidos,
-            tipo_documento=tipo_documento,
-            tipo_persona="Fisica",
-            email=email,
-            telefono=telefono,
-            domicilio=domicilio,
-            ciudad=ciudad,
-            provincia=provincia,
-            codigo_postal=codigo_postal,
-            id=id_persona
-        )
+    def __init__(self, id_empleado: Optional[int] = None, id_persona: Optional[int] = None,
+                 nro_documento: str = "", nombres: str = "", apellidos: str = "",
+                 legajo: str = "", cargo: str = "Empleado_Admin", sector: str = "Administración",
+                 tipo_vinculo: str = "Planta", sueldo: float = 0.0,
+                 email: str = "", telefono: str = "", id_usuario: int = 1):
+
+        super().__init__(id_persona=id_persona, nro_documento=nro_documento,
+                         nombres=nombres, apellidos=apellidos, email=email, telefono=telefono)
 
         self.id_empleado = id_empleado
-        self.id_usuario = id_usuario
-        self.legajo = legajo
-        self.cargo = cargo
-        self.sector = sector
-        self.sueldo = sueldo
+        self.legajo = legajo.strip()
 
-    def __repr__(self):
-        return f"<Empleado Legajo={self.legajo} Nombre='{self.obtener_nombre_completo()}'>"
+        # Validaciones defensivas contra las listas de opciones (Valores por descarte/fallback)
+        self.cargo = cargo if cargo in CARGOS else "Empleado_Admin"
+        self.sector = sector if sector in SECTORES else "Administración"
+        self.tipo_vinculo = tipo_vinculo if tipo_vinculo in TIPOS_VINCULO else "Planta"
+
+        self.sueldo = float(sueldo) if sueldo else 0.0
+        self.id_usuario = id_usuario
+        self.activo = True
+
+    @property
+    def requiere_factura(self) -> bool:
+        """ Regla de Negocio: Personal contratado debe presentar factura por locación. """
+        return self.tipo_vinculo == "Contratado"
+
+    @property
+    def requiere_comprobante_afip(self) -> bool:
+        """ Regla de Negocio: Monotributistas/Contratados requieren comprobante de pago AFIP/ARCA. """
+        return self.tipo_vinculo in ["Contratado", "Propietario"]
