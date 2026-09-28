@@ -222,3 +222,6 @@ __marimo__/
 
 # Visual Studio Code
 .vscode/
+
+# Ignorar bases de datos binarias locales para no pisar datos en Git
+*.db
