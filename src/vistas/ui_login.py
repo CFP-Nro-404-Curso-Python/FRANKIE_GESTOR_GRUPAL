@@ -1,7 +1,9 @@
 import tkinter as tk
-from tkinter import messagebox
+# AGREGADO: Importamos ttk para usar los componentes estilizados.
+from tkinter import ttk, messagebox 
 from infraestructura.repo_core import RepoCore
-
+# AGREGADO: Importamos los estilos de Alicia.
+from vistas.estilos import aplicar_estilos_base 
 
 
 class VentanaLogin:
@@ -21,18 +23,20 @@ class VentanaLogin:
         self._dibujar_interfaz()
 
     def _dibujar_interfaz(self):
-        # Etiquetas y Cajas de texto
-        tk.Label(self.root, text="Usuario:").pack(pady=(20, 5))
-        self.entry_usuario = tk.Entry(self.root)
+        # Etiquetas y Cajas de texto.
+        # MODIFICADO: Cambiamos tk.Label por ttk.Label y tk.Entry por ttk.Entry para heredar el CSS.
+        ttk.Label(self.root, text="Usuario:").pack(pady=(20, 5))
+        self.entry_usuario = ttk.Entry(self.root)
         self.entry_usuario.pack()
 
-        tk.Label(self.root, text="Contraseña:").pack(pady=(10, 5))
+        ttk.Label(self.root, text="Contraseña:").pack(pady=(10, 5))
         # show="*" oculta los caracteres tipeados por seguridad.
-        self.entry_password = tk.Entry(self.root, show="*")
+        self.entry_password = ttk.Entry(self.root, show="*")
         self.entry_password.pack()
 
         # Botón de ingreso (El 'command' vincula el click con nuestra función).
-        self.btn_ingresar = tk.Button(self.root, text="Ingresar", command=self.procesar_login)
+        # MODIFICADO: Cambiamos tk.Button por ttk.Button.
+        self.btn_ingresar = ttk.Button(self.root, text="Ingresar", command=self.procesar_login)
         self.btn_ingresar.pack(pady=20)
 
     def procesar_login(self):
@@ -58,7 +62,8 @@ class VentanaLogin:
             intentos_restantes = 3 - self.intentos_fallidos
             
             if self.intentos_fallidos >= 3:
-                self.btn_ingresar.config(state=tk.DISABLED) # Bloqueamos el botón.
+                # MODIFICADO: ttk.Button usa state(['disabled']) en lugar de config(state=tk.DISABLED).
+                self.btn_ingresar.state(['disabled'])
                 messagebox.showerror("Bloqueo", "Sistema bloqueado por seguridad. Hablá con el Administrador.")
             else:
                 messagebox.showerror("Error", f"Credenciales incorrectas. Te quedan {intentos_restantes} intentos.")
@@ -85,5 +90,6 @@ class VentanaLogin:
 # Código para probar la ventana suelta durante el desarrollo:
 if __name__ == "__main__":
     app = tk.Tk()
+    aplicar_estilos_base(app) # AGREGADO: Aplicamos los estilos antes de construir la ventana.
     ventana = VentanaLogin(app)
     app.mainloop()
