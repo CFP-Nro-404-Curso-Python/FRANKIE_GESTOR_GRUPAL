@@ -129,5 +129,7 @@ Tkinter es propenso a generar "código espagueti" si no se estructura correctame
 2.  **Diseño Orientado a Objetos (Clases obligatorias):** No se debe escribir código Tkinter suelto en el archivo. Toda pantalla nueva debe estar encapsulada en una Clase (ej. `class VentanaInventario:`). Esto aísla el entorno y evita colisiones de variables.
 3.  **Separar Dibujo de Lógica:** Las clases visuales deben tener un método dedicado exclusivamente a renderizar componentes (ej. `_dibujar_interfaz()`), y métodos separados para ejecutar acciones (ej. `guardar_cliente()`).
 
+### 6.4 Refactorización Estructural (Semana 3)
+Para estandarizar el diseño y permitir que la ventana de Login se integre como un componente dentro de futuros contenedores (Panel Principal), se refactorizó la clase `VentanaLogin`. Ahora hereda directamente de `ttk.Frame`, encapsulando sus propios widgets mediante `self` en lugar de inyectarlos forzadamente sobre la ventana raíz. Además, se actualizó la semilla de `esquema.sql` para que el usuario nativo cuente con el hash SHA-256 correspondiente, estabilizando el sistema de validación criptográfica.
 ---
 *(Los siguientes apartados se irán completando a medida que desarrollemos cada componente de la Infraestructura y el Módulo 1).*

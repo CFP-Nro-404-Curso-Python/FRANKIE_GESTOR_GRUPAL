@@ -192,8 +192,9 @@ INSERT OR IGNORE INTO roles (nombre, descripcion) VALUES
 ('Empleado - Ventas', 'Acceso a clientes y facturación'),
 ('Empleado - Compras', 'Acceso a proveedores y stock');
 
+-- Se reemplazó 'admin123' por su hash SHA-256 equivalente para que el Repositorio lo valide correctamente.
 INSERT OR IGNORE INTO usuarios (username, password, activo) VALUES
-('admin', 'admin123', 1);
+('admin', '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', 1);
 
 -- Vinculamos al usuario admin (ID 1) con el rol Administrador (ID 1).
 INSERT OR IGNORE INTO usuarios_roles (id_usuario, id_rol) VALUES (1, 1);

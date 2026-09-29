@@ -1,13 +1,25 @@
+import sys
+import os
 import tkinter as tk
 # AGREGADO: Importamos ttk para usar los componentes estilizados.
-from tkinter import ttk, messagebox 
+from tkinter import ttk, messagebox
+
+# FIX DE RUTAS: Le enseñamos a Python dónde está la carpeta 'src' 
+# para que pueda encontrar 'infraestructura' al ejecutar este script suelto.
+ruta_src = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+if ruta_src not in sys.path:
+    sys.path.insert(0, ruta_src)
+
 from infraestructura.repo_core import RepoCore
 # AGREGADO: Importamos los estilos de Alicia.
 from vistas.estilos import aplicar_estilos_base 
 
 
 
-class VentanaLogin:
+# MODIFICACIÓN: 
+# ANTES: class VentanaLogin:
+# DESPUÉS: Heredamos de ttk.Frame para aislar el componente visual.
+class VentanaLogin(ttk.Frame):
     """
     Capa Visual (Vista) para el ingreso al sistema.
     Hereda de ttk.Frame para integrarse limpiamente con la arquitectura de la UI.
@@ -19,14 +31,16 @@ class VentanaLogin:
         self.parent.geometry("300x250")
         self.parent.resizable(False, False)
 
-        # Empaquetamos este Frame para que ocupe toda la ventana base.
+        # # MODIFICACIÓN: Empaquetamos el frame para que tome el control del espacio.
         self.pack(fill="both", expand=True, padx=20, pady=20)
         
         self.intentos_fallidos = 0
         self._dibujar_interfaz()
 
     def _dibujar_interfaz(self):
-        # Al heredar de ttk.Frame, el contenedor es 'self', no 'self.root'
+        # MODIFICACIÓN: 
+        # ANTES: ttk.Label(self.root, ...).
+        # DESPUÉS: Al ser un Frame, los elementos se pegan directamente a 'self'.
         ttk.Label(self, text="Usuario:").pack(pady=(5, 5))
         self.entry_usuario = ttk.Entry(self)
         self.entry_usuario.pack()
@@ -55,7 +69,9 @@ class VentanaLogin:
         if usuario_validado:
             messagebox.showinfo("Éxito", f"Bienvenido, {usuario_validado.username}")
             # Acá en la Semana 5 llamaremos al orquestador para abrir el 'ui_panel.py'.
-            self.parent.destroy() 
+            
+            # MODIFICACIÓN: Destruimos el padre ('parent') en lugar de 'root'.
+            self.parent.destroy()
         else:
             self.intentos_fallidos += 1
             intentos_restantes = 3 - self.intentos_fallidos
