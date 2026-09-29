@@ -6,39 +6,38 @@ from infraestructura.repo_core import RepoCore
 from vistas.estilos import aplicar_estilos_base 
 
 
+
 class VentanaLogin:
     """
     Capa Visual (Vista) para el ingreso al sistema.
-    Solamente dibuja la pantalla y captura los clicks del usuario.
+    Hereda de ttk.Frame para integrarse limpiamente con la arquitectura de la UI.
     """
-    def __init__(self, root):
-        self.root = root
-        self.root.title("Frankie Gestor - Acceso")
-        self.root.geometry("300x250")
-        self.root.resizable(False, False)
+    def __init__(self, parent, *args, **kwargs):
+        super().__init__(parent, *args, **kwargs)
+        self.parent = parent
+        self.parent.title("Frankie Gestor - Acceso")
+        self.parent.geometry("300x250")
+        self.parent.resizable(False, False)
 
-        # Contador de seguridad (regla de negocio simple que podemos manejar acá).
+        # Empaquetamos este Frame para que ocupe toda la ventana base.
+        self.pack(fill="both", expand=True, padx=20, pady=20)
+        
         self.intentos_fallidos = 0
-
         self._dibujar_interfaz()
 
     def _dibujar_interfaz(self):
-        # Etiquetas y Cajas de texto.
-        # MODIFICADO: Cambiamos tk.Label por ttk.Label y tk.Entry por ttk.Entry para heredar el CSS.
-        ttk.Label(self.root, text="Usuario:").pack(pady=(20, 5))
-        self.entry_usuario = ttk.Entry(self.root)
+        # Al heredar de ttk.Frame, el contenedor es 'self', no 'self.root'
+        ttk.Label(self, text="Usuario:").pack(pady=(5, 5))
+        self.entry_usuario = ttk.Entry(self)
         self.entry_usuario.pack()
 
-        ttk.Label(self.root, text="Contraseña:").pack(pady=(10, 5))
-        # show="*" oculta los caracteres tipeados por seguridad.
-        self.entry_password = ttk.Entry(self.root, show="*")
+        ttk.Label(self, text="Contraseña:").pack(pady=(10, 5))
+        self.entry_password = ttk.Entry(self, show="*")
         self.entry_password.pack()
 
-        # Botón de ingreso (El 'command' vincula el click con nuestra función).
-        # MODIFICADO: Cambiamos tk.Button por ttk.Button.
-        self.btn_ingresar = ttk.Button(self.root, text="Ingresar", command=self.procesar_login)
+        self.btn_ingresar = ttk.Button(self, text="Ingresar", command=self.procesar_login)
         self.btn_ingresar.pack(pady=20)
-
+    
     def procesar_login(self):
         # 1. Capturamos lo que el usuario escribió.
         usuario_tipeado = self.entry_usuario.get()
@@ -56,7 +55,7 @@ class VentanaLogin:
         if usuario_validado:
             messagebox.showinfo("Éxito", f"Bienvenido, {usuario_validado.username}")
             # Acá en la Semana 5 llamaremos al orquestador para abrir el 'ui_panel.py'.
-            self.root.destroy() 
+            self.parent.destroy() 
         else:
             self.intentos_fallidos += 1
             intentos_restantes = 3 - self.intentos_fallidos

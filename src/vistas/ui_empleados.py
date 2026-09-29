@@ -463,8 +463,8 @@ if __name__ == "__main__":
     # ¡El diseño visual y la lógica de la tabla te quedaron espectaculares!
     # =============================================================================
     
-    print("[MÓDULO UI] Verificando esquema de la base de datos...")
-    RepositorioRRHH.asegurar_columnas()
+    # print("[MÓDULO UI] Verificando esquema de la base de datos...")
+    # RepositorioRRHH.asegurar_columnas()
 
     root = tk.Tk()
     root.title("Sistema Integrado - Módulo de Recursos Humanos")
