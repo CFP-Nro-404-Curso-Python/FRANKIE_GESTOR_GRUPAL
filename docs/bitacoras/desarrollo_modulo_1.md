@@ -131,5 +131,20 @@ Tkinter es propenso a generar "código espagueti" si no se estructura correctame
 
 ### 6.4 Refactorización Estructural (Semana 3)
 Para estandarizar el diseño y permitir que la ventana de Login se integre como un componente dentro de futuros contenedores (Panel Principal), se refactorizó la clase `VentanaLogin`. Ahora hereda directamente de `ttk.Frame`, encapsulando sus propios widgets mediante `self` en lugar de inyectarlos forzadamente sobre la ventana raíz. Además, se actualizó la semilla de `esquema.sql` para que el usuario nativo cuente con el hash SHA-256 correspondiente, estabilizando el sistema de validación criptográfica.
+
+
+## 7. Pruebas de Integración Global (Semana 3)
+
+**Archivo:** `tests/test_sistema.py`
+**Objetivo:** Validar la orquestación del sistema (End-to-End) asegurando que los distintos módulos interactúen sin romper el esquema de persistencia ni la arquitectura.
+
+### 7.1 Alcance de las Pruebas (Módulos 1 y 2)
+Se desarrolló un script de pruebas automatizadas que ejecuta el flujo principal de la aplicación desde cero:
+1.  **Inicialización:** Verifica la existencia de `esquema.sql` y despliega la base de datos vacía y sus semillas de manera automatizada, validando que el patrón Singleton de `ConexionDB` no genere bloqueos por concurrencia.
+2.  **Seguridad y Autenticación (Módulo 1):** Comprueba que el repositorio rechace credenciales falsas y que el login exitoso (con validación de hash SHA-256) instancie correctamente la entidad `Usuario` con sus respectivos roles.
+3.  **Persistencia Transaccional (Módulo 2):** Inserta la entidad `Empleado`, verificando que la grabación en múltiples tablas (`personas` y `empleados`) se realice de manera estrictamente atómica, respetando el contrato de la base de datos.
+
+### 7.2 Directiva Técnica: Resolución de Rutas (`sys.path`)
+Al trabajar con una estructura de carpetas modular (separando `src/` de `tests/`), ejecutar scripts de manera aislada genera el error `ModuleNotFoundError`. Para solucionar esto durante la fase de desarrollo, se implementó una inyección dinámica de rutas. Al inicio de cada archivo de prueba, o módulo visual que se desee ejecutar de forma independiente, se inyecta la ruta absoluta del directorio `src/` en el `sys.path`. Esto garantiza que Python reconozca nuestros paquetes internos sin importar desde qué directorio de la terminal se dispare la ejecución.
 ---
 *(Los siguientes apartados se irán completando a medida que desarrollemos cada componente de la Infraestructura y el Módulo 1).*
