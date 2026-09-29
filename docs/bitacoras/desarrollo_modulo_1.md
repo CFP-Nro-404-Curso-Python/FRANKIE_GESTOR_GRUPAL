@@ -146,5 +146,6 @@ Se desarrolló un script de pruebas automatizadas que ejecuta el flujo principal
 
 ### 7.2 Directiva Técnica: Resolución de Rutas (`sys.path`)
 Al trabajar con una estructura de carpetas modular (separando `src/` de `tests/`), ejecutar scripts de manera aislada genera el error `ModuleNotFoundError`. Para solucionar esto durante la fase de desarrollo, se implementó una inyección dinámica de rutas. Al inicio de cada archivo de prueba, o módulo visual que se desee ejecutar de forma independiente, se inyecta la ruta absoluta del directorio `src/` en el `sys.path`. Esto garantiza que Python reconozca nuestros paquetes internos sin importar desde qué directorio de la terminal se dispare la ejecución.
+
 ---
 *(Los siguientes apartados se irán completando a medida que desarrollemos cada componente de la Infraestructura y el Módulo 1).*
