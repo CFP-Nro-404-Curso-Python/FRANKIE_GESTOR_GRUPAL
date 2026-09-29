@@ -44,6 +44,12 @@ class Persona:
         self.telefono = telefono.strip()
         self.tipo_persona = "FISICA"  # Exigido por restricción CHECK en BD
 
+    def obtener_nombre_completo(self) -> str:
+        """ Devuelve el nombre formateado. Útil para la UI y reportes. """
+        if self.apellidos and self.nombres:
+            return f"{self.apellidos}, {self.nombres}"
+        return self.nombres or "Sin Nombre"
+
 
 class Empleado(Persona):
     """ Entidad de Dominio que representa a un trabajador dentro de la organización. """

@@ -1,4 +1,17 @@
+import sys
 import os
+
+# ==============================================================================
+# ⚠️ MODIFICACIÓN DAVID: FIX DE RUTAS (sys.path)
+# ==============================================================================
+# Al ejecutar este script suelto desde la carpeta /tests, Python no sabe 
+# que existe la carpeta /src. Calculamos la ruta absoluta hacia /src y se la 
+# inyectamos al sistema ANTES de hacer los imports de nuestros módulos.
+# ==============================================================================
+ruta_src = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src'))
+if ruta_src not in sys.path:
+    sys.path.insert(0, ruta_src)
+
 from infraestructura.conexion import ConexionDB
 from dominio.entidades_rrhh import Empleado
 from infraestructura.repo_rrhh import RepositorioRRHH
@@ -8,7 +21,12 @@ def inicializar_bd():
     """
     Carga el archivo db/esquema.sql en la base de datos local si las tablas no existen.
     """
-    ruta_esquema = os.path.join("db", "esquema.sql")
+    
+    # Como este script se puede correr desde la raíz o desde /tests,
+    # calculamos la ruta a la BD dinámicamente para que no falle.
+    ruta_raiz = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+    ruta_esquema = os.path.join(ruta_raiz, "db", "esquema.sql")
+    
     if os.path.exists(ruta_esquema):
         with open(ruta_esquema, "r", encoding="utf-8") as f:
             sql_script = f.read()
