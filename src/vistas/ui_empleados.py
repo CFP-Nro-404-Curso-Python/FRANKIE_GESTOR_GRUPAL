@@ -3,28 +3,37 @@
 MÓDULO DE INTERFAZ DE USUARIO: CAPA DE PRESENTACIÓN DE EMPLEADOS (iu_empleados.py)
 ===============================================================================
 Estrategia y Buenas Prácticas Aplicadas:
-1. Identificación Tributaria/Laboral (CUIT/CUIL):
-   Se adecua la captura de documento al formato CUIT/CUIL (11 dígitos sin espacios
-   ni puntos). La vista de la tabla aplica formato dinámico con guiones medios (XX-XXXXXXXX-X).
+1. Módulo Integrado de Vista (Tkinter / TTK):
+   Diseñado para ser instanciado como un componente (Frame) dentro de la
+   ventana principal gestionada por 'main.py'.
 
-2. Gestión Autoincremental del Legajo:
-   El campo 'Legajo' se calcula automáticamente a través de la secuencia del
-   repositorio y se deshabilita en la UI para evitar inconsistencias manuales.
+2. Formato e Identificación Fiscal (CUIT/CUIL):
+   Visualización limpia y formateada (XX-XXXXXXXX-X) en la grilla sin alterar
+   la representación de 11 dígitos numéricos en la persistencia.
 
-3. Coincidencia Estricta con la Entidad de Dominio:
-   Se utiliza `emp.id` para el identificador heredado de Persona y `id_persona`
-   para instanciar Empleado, manteniendo compatibilidad total con la firma.
+3. Valores Sugeridos por Defecto:
+   Cargo inicial: 'empleado_ventas' | Sector inicial: 'Ventas'.
 
-4. Desacoplamiento / Mantenibilidad:
-   Se conserva la carga de sueldo básico y se remueve la función de liquidación
-   para modularizarla independientemente en el módulo futuro 'recibo_haberes.py'.
+4. Desacoplamiento de Inicialización:
+   Delegación total de arranque, temas y verificación de BD a 'main.py'.
 ===============================================================================
 """
 
+import sys
+from pathlib import Path
 import tkinter as tk
 from tkinter import ttk, messagebox
 from typing import List, Optional
 
+# Garantizar que el directorio actual esté en sys.path
+DIR_ACTUAL = Path(__file__).resolve().parent
+RAIZ_PROYECTO = DIR_ACTUAL.parent
+
+for path in (DIR_ACTUAL, RAIZ_PROYECTO):
+    if str(path) not in sys.path:
+        sys.path.insert(0, str(path))
+
+# Importación de Entidades y Repositorios
 from dominio.entidades_rrhh import (
     Empleado,
     limpiar_documento,
@@ -33,6 +42,7 @@ from dominio.entidades_rrhh import (
     TIPOS_VINCULO
 )
 from infraestructura.repo_rrhh import RepositorioRRHH
+from estilos import COLOR_TEXTO_MUTED
 
 
 def formatear_cuit(cuit_limpio: str) -> str:
@@ -49,12 +59,12 @@ class InterfazRRHH(ttk.Frame):
     def __init__(self, parent, *args, **kwargs):
         super().__init__(parent, *args, **kwargs)
 
-        # ID del empleado en edición (None = Modo Creación)
         self.empleado_edicion_id: Optional[int] = None
 
-        # Configurar estructura principal del frame
+        # Configurar distribución responsiva
         self.columnconfigure(0, weight=1)
-        self.rowconfigure(1, weight=1)
+        self.rowconfigure(1, weight=0)  # Panel Formulario
+        self.rowconfigure(2, weight=1)  # Panel Grilla/Tabla
 
         self._crear_encabezado()
         self._crear_panel_formulario()
@@ -63,107 +73,104 @@ class InterfazRRHH(ttk.Frame):
         self._actualizar_legajo_sugerido()
 
     def _crear_encabezado(self):
-        """ Renderiza el título principal y subtítulo de la sección. """
         frame_top = ttk.Frame(self)
         frame_top.grid(row=0, column=0, padx=20, pady=(15, 5), sticky="ew")
 
         lbl_titulo = ttk.Label(
             frame_top,
             text="Gestión de Recursos Humanos",
-            font=("Helvetica", 16, "bold")
+            style="Subtitulo.TLabel"
         )
         lbl_titulo.pack(anchor="w")
 
         lbl_subtitulo = ttk.Label(
             frame_top,
             text="Administración de legajos, datos fiscales, cargos y contratos",
-            font=("Helvetica", 9),
-            foreground="gray"
+            foreground=COLOR_TEXTO_MUTED
         )
         lbl_subtitulo.pack(anchor="w")
 
     def _crear_panel_formulario(self):
-        """ Renderiza los campos de entrada utilizando ttk.Combobox para opciones restringidas. """
         self.frame_form = ttk.LabelFrame(self, text=" Datos del Empleado ")
         self.frame_form.grid(row=1, column=0, padx=20, pady=10, sticky="ew")
         self.frame_form.columnconfigure((1, 3), weight=1)
 
         # Row 0: Nombres y Apellidos
-        ttk.Label(self.frame_form, text="Nombres:").grid(row=0, column=0, padx=10, pady=5, sticky="w")
+        ttk.Label(self.frame_form, text="Nombres:").grid(row=0, column=0, padx=10, pady=4, sticky="w")
         self.txt_nombres = ttk.Entry(self.frame_form)
-        self.txt_nombres.grid(row=0, column=1, padx=10, pady=5, sticky="ew")
+        self.txt_nombres.grid(row=0, column=1, padx=10, pady=4, sticky="ew")
 
-        ttk.Label(self.frame_form, text="Apellidos:").grid(row=0, column=2, padx=10, pady=5, sticky="w")
+        ttk.Label(self.frame_form, text="Apellidos:").grid(row=0, column=2, padx=10, pady=4, sticky="w")
         self.txt_apellidos = ttk.Entry(self.frame_form)
-        self.txt_apellidos.grid(row=0, column=3, padx=10, pady=5, sticky="ew")
+        self.txt_apellidos.grid(row=0, column=3, padx=10, pady=4, sticky="ew")
 
-        # Row 1: CUIT/CUIL y Legajo (Autoincremental deshabilitado)
-        ttk.Label(self.frame_form, text="CUIT / CUIL (11 dígitos):").grid(row=1, column=0, padx=10, pady=5, sticky="w")
+        # Row 1: CUIT/CUIL y Legajo
+        ttk.Label(self.frame_form, text="CUIT / CUIL (11 dígitos):").grid(row=1, column=0, padx=10, pady=4, sticky="w")
         self.txt_documento = ttk.Entry(self.frame_form)
-        self.txt_documento.grid(row=1, column=1, padx=10, pady=5, sticky="ew")
+        self.txt_documento.grid(row=1, column=1, padx=10, pady=4, sticky="ew")
 
-        ttk.Label(self.frame_form, text="Legajo:").grid(row=1, column=2, padx=10, pady=5, sticky="w")
+        ttk.Label(self.frame_form, text="Legajo:").grid(row=1, column=2, padx=10, pady=4, sticky="w")
         self.txt_legajo = ttk.Entry(self.frame_form)
-        self.txt_legajo.grid(row=1, column=3, padx=10, pady=5, sticky="ew")
+        self.txt_legajo.grid(row=1, column=3, padx=10, pady=4, sticky="ew")
 
-        # Row 2: Cargo (Desplegable) y Sector (Desplegable)
-        ttk.Label(self.frame_form, text="Cargo:").grid(row=2, column=0, padx=10, pady=5, sticky="w")
+        # Row 2: Cargo y Sector
+        ttk.Label(self.frame_form, text="Cargo:").grid(row=2, column=0, padx=10, pady=4, sticky="w")
         self.cmb_cargo = ttk.Combobox(self.frame_form, values=CARGOS, state="readonly")
-        self.cmb_cargo.set(CARGOS[0])
-        self.cmb_cargo.grid(row=2, column=1, padx=10, pady=5, sticky="ew")
+        default_cargo = "empleado_ventas" if "empleado_ventas" in CARGOS else CARGOS[0]
+        self.cmb_cargo.set(default_cargo)
+        self.cmb_cargo.grid(row=2, column=1, padx=10, pady=4, sticky="ew")
 
-        ttk.Label(self.frame_form, text="Sector:").grid(row=2, column=2, padx=10, pady=5, sticky="w")
+        ttk.Label(self.frame_form, text="Sector:").grid(row=2, column=2, padx=10, pady=4, sticky="w")
         self.cmb_sector = ttk.Combobox(self.frame_form, values=SECTORES, state="readonly")
-        self.cmb_sector.set(SECTORES[0])
-        self.cmb_sector.grid(row=2, column=3, padx=10, pady=5, sticky="ew")
+        default_sector = "Ventas" if "Ventas" in SECTORES else SECTORES[0]
+        self.cmb_sector.set(default_sector)
+        self.cmb_sector.grid(row=2, column=3, padx=10, pady=4, sticky="ew")
 
-        # Row 3: Tipo de Vínculo (Desplegable) y Sueldo Base
-        ttk.Label(self.frame_form, text="Vínculo Laboral:").grid(row=3, column=0, padx=10, pady=5, sticky="w")
+        # Row 3: Tipo de Vínculo y Sueldo Base
+        ttk.Label(self.frame_form, text="Vínculo Laboral:").grid(row=3, column=0, padx=10, pady=4, sticky="w")
         self.cmb_vinculo = ttk.Combobox(self.frame_form, values=TIPOS_VINCULO, state="readonly")
         self.cmb_vinculo.set("Planta")
-        self.cmb_vinculo.grid(row=3, column=1, padx=10, pady=5, sticky="ew")
+        self.cmb_vinculo.grid(row=3, column=1, padx=10, pady=4, sticky="ew")
 
-        ttk.Label(self.frame_form, text="Sueldo Base ($):").grid(row=3, column=2, padx=10, pady=5, sticky="w")
+        ttk.Label(self.frame_form, text="Sueldo Base ($):").grid(row=3, column=2, padx=10, pady=4, sticky="w")
         self.txt_sueldo = ttk.Entry(self.frame_form)
-        self.txt_sueldo.grid(row=3, column=3, padx=10, pady=5, sticky="ew")
+        self.txt_sueldo.grid(row=3, column=3, padx=10, pady=4, sticky="ew")
 
         # Row 4: Teléfono y Email
-        ttk.Label(self.frame_form, text="Teléfono:").grid(row=4, column=0, padx=10, pady=5, sticky="w")
+        ttk.Label(self.frame_form, text="Teléfono:").grid(row=4, column=0, padx=10, pady=4, sticky="w")
         self.txt_telefono = ttk.Entry(self.frame_form)
-        self.txt_telefono.grid(row=4, column=1, padx=10, pady=5, sticky="ew")
+        self.txt_telefono.grid(row=4, column=1, padx=10, pady=4, sticky="ew")
 
-        ttk.Label(self.frame_form, text="Email:").grid(row=4, column=2, padx=10, pady=5, sticky="w")
+        ttk.Label(self.frame_form, text="Email:").grid(row=4, column=2, padx=10, pady=4, sticky="w")
         self.txt_email = ttk.Entry(self.frame_form)
-        self.txt_email.grid(row=4, column=3, padx=10, pady=5, sticky="ew")
+        self.txt_email.grid(row=4, column=3, padx=10, pady=4, sticky="ew")
 
-        # Row 5: Botonera de Acciones
+        # Row 5: Botonera
         frame_botones = ttk.Frame(self.frame_form)
-        frame_botones.grid(row=5, column=0, columnspan=4, pady=15, sticky="ew")
+        frame_botones.grid(row=5, column=0, columnspan=4, pady=10, sticky="w")
 
         self.btn_guardar = ttk.Button(
             frame_botones,
-            text="Guardar Empleado",
+            text="Guardar datos",
             command=self._guardar_empleado
         )
-        self.btn_guardar.pack(side="left", padx=10)
+        self.btn_guardar.pack(side="left", padx=(10, 5))
 
         self.btn_limpiar = ttk.Button(
             frame_botones,
             text="Limpiar Formulario",
             command=self._limpiar_formulario
         )
-        self.btn_limpiar.pack(side="left", padx=10)
+        self.btn_limpiar.pack(side="left", padx=5)
 
     def _crear_panel_tabla(self):
-        """ Construye la grilla desplegable con los empleados existentes. """
         frame_tabla = ttk.LabelFrame(self, text=" Nómina de Personal ")
         frame_tabla.grid(row=2, column=0, padx=20, pady=(0, 15), sticky="nsew")
         frame_tabla.columnconfigure(0, weight=1)
         frame_tabla.rowconfigure(1, weight=1)
 
-        # Buscador y Filtros
         frame_filtro = ttk.Frame(frame_tabla)
-        frame_filtro.grid(row=0, column=0, padx=10, pady=10, sticky="ew")
+        frame_filtro.grid(row=0, column=0, padx=10, pady=5, sticky="ew")
 
         ttk.Label(frame_filtro, text="Buscar:").pack(side="left", padx=(0, 5))
         self.txt_buscar = ttk.Entry(frame_filtro)
@@ -179,9 +186,8 @@ class InterfazRRHH(ttk.Frame):
         )
         self.chk_inactivos.pack(side="right", padx=10)
 
-        # Tabla Treeview (Con columna CUIT/CUIL)
         columnas = ("id", "legajo", "cuit", "nombre", "cargo", "sector", "vinculo", "sueldo", "estado")
-        self.tabla = ttk.Treeview(frame_tabla, columns=columnas, show="headings", height=8)
+        self.tabla = ttk.Treeview(frame_tabla, columns=columnas, show="headings", height=6)
 
         self.tabla.heading("id", text="ID")
         self.tabla.heading("legajo", text="Legajo")
@@ -203,19 +209,16 @@ class InterfazRRHH(ttk.Frame):
         self.tabla.column("sueldo", width=90, anchor="e")
         self.tabla.column("estado", width=70, anchor="center")
 
-        # Scrollbar vertical
         scrollbar = ttk.Scrollbar(frame_tabla, orient="vertical", command=self.tabla.yview)
         self.tabla.configure(yscrollcommand=scrollbar.set)
 
-        self.tabla.grid(row=1, column=0, padx=(10, 0), pady=10, sticky="nsew")
-        scrollbar.grid(row=1, column=1, padx=(0, 10), pady=10, sticky="ns")
+        self.tabla.grid(row=1, column=0, padx=(10, 0), pady=5, sticky="nsew")
+        scrollbar.grid(row=1, column=1, padx=(0, 10), pady=5, sticky="ns")
 
-        # Menú contextual / Eventos
         self.tabla.bind("<Double-1>", self._al_doble_click_tabla)
 
-        # Botones de gestión
         frame_acciones_tabla = ttk.Frame(frame_tabla)
-        frame_acciones_tabla.grid(row=2, column=0, columnspan=2, padx=10, pady=(0, 10), sticky="ew")
+        frame_acciones_tabla.grid(row=2, column=0, columnspan=2, padx=10, pady=(0, 5), sticky="ew")
 
         btn_editar = ttk.Button(
             frame_acciones_tabla,
@@ -232,22 +235,17 @@ class InterfazRRHH(ttk.Frame):
         btn_estado.pack(side="left", padx=5)
 
     def _actualizar_legajo_sugerido(self):
-        """ Asigna el legajo autoincremental automático y bloquea su edición manual. """
         self.txt_legajo.config(state="normal")
         self.txt_legajo.delete(0, "end")
-
         if self.empleado_edicion_id is None:
             siguiente = RepositorioRRHH.generar_siguiente_legajo()
             self.txt_legajo.insert(0, siguiente)
-
         self.txt_legajo.config(state="disabled")
 
     def _al_buscar_tecla(self, _event):
-        """ Handler del evento keyup para el buscador. """
         self._cargar_tabla()
 
     def _cargar_tabla(self):
-        """ Limpia la grilla y solicita los datos actualizados al Repositorio. """
         for item in self.tabla.get_children():
             self.tabla.delete(item)
 
@@ -278,7 +276,6 @@ class InterfazRRHH(ttk.Frame):
             ))
 
     def _limpiar_formulario(self):
-        """ Restablece los valores por defecto del formulario. """
         self.empleado_edicion_id = None
         self.txt_nombres.delete(0, "end")
         self.txt_apellidos.delete(0, "end")
@@ -287,21 +284,22 @@ class InterfazRRHH(ttk.Frame):
         self.txt_telefono.delete(0, "end")
         self.txt_email.delete(0, "end")
 
-        self.cmb_cargo.set(CARGOS[0])
-        self.cmb_sector.set(SECTORES[0])
+        default_cargo = "empleado_ventas" if "empleado_ventas" in CARGOS else CARGOS[0]
+        default_sector = "Ventas" if "Ventas" in SECTORES else SECTORES[0]
+
+        self.cmb_cargo.set(default_cargo)
+        self.cmb_sector.set(default_sector)
         self.cmb_vinculo.set("Planta")
-        self.btn_guardar.configure(text="Guardar Empleado")
+        self.btn_guardar.configure(text="Guardar datos")
 
         self._actualizar_legajo_sugerido()
 
     def _guardar_empleado(self):
-        """ Captura, valida y coordina la persistencia del objeto Empleado. """
         nombres = self.txt_nombres.get().strip()
         apellidos = self.txt_apellidos.get().strip()
         cuit_raw = self.txt_documento.get().strip()
         cuit_limpio = limpiar_documento(cuit_raw)
 
-        # Habilitar temporalmente para leer el valor del legajo
         self.txt_legajo.config(state="normal")
         legajo = self.txt_legajo.get().strip()
         self.txt_legajo.config(state="disabled")
@@ -317,7 +315,6 @@ class InterfazRRHH(ttk.Frame):
                                    "Ingrese un número de CUIT / CUIL válido de 11 dígitos numéricos sin puntos ni guiones.")
             return
 
-        # Validar duplicados de CUIT obteniendo la referencia a la Persona
         id_persona_ref = None
         if self.empleado_edicion_id:
             for emp in RepositorioRRHH.listar_empleados(incluir_inactivos=True):
@@ -366,7 +363,6 @@ class InterfazRRHH(ttk.Frame):
             messagebox.showerror("Error", "Ocurrió un fallo en la operación de base de datos.")
 
     def _cargar_seleccion_formulario(self):
-        """ Carga los datos de la fila seleccionada en los campos de edición. """
         seleccion = self.tabla.selection()
         if not seleccion:
             messagebox.showwarning("Atención", "Seleccione un empleado de la lista para editar.")
@@ -385,7 +381,6 @@ class InterfazRRHH(ttk.Frame):
             self.txt_apellidos.insert(0, emp_sel.apellidos or "")
             self.txt_documento.insert(0, emp_sel.nro_documento or "")
 
-            # Cargar legajo guardado en modo lectura
             self.txt_legajo.config(state="normal")
             self.txt_legajo.delete(0, "end")
             self.txt_legajo.insert(0, emp_sel.legajo or "")
@@ -402,14 +397,12 @@ class InterfazRRHH(ttk.Frame):
             if emp_sel.tipo_vinculo in TIPOS_VINCULO:
                 self.cmb_vinculo.set(emp_sel.tipo_vinculo)
 
-            self.btn_guardar.configure(text="Actualizar Empleado")
+            self.btn_guardar.configure(text="Guardar datos")
 
     def _al_doble_click_tabla(self, _event):
-        """ Evento rápido para cargar datos al hacer doble clic. """
         self._cargar_seleccion_formulario()
 
     def _alternar_estado_empleado(self):
-        """ Realiza la baja lógica o reactivación del empleado seleccionado. """
         seleccion = self.tabla.selection()
         if not seleccion:
             messagebox.showwarning("Atención", "Seleccione un empleado para cambiar su estado.")
@@ -428,25 +421,3 @@ class InterfazRRHH(ttk.Frame):
                 self._cargar_tabla()
             else:
                 messagebox.showerror("Error", "No se pudo cambiar el estado en la base de datos.")
-
-
-# =============================================================================
-# BLOQUE DE PRUEBA Y EJECUCIÓN DIRECTA DEL MÓDULO (test_rrhh)
-# =============================================================================
-if __name__ == "__main__":
-    """
-    Permite ejecutar este archivo de manera independiente para probar la vista.
-    """
-    print("[MÓDULO UI] Verificando esquema de la base de datos...")
-    RepositorioRRHH.asegurar_columnas()
-
-    root = tk.Tk()
-    root.title("Sistema Integrado - Módulo de Recursos Humanos")
-    root.geometry("950x650")
-    root.minsize(800, 500)
-
-    app = InterfazRRHH(root)
-    app.pack(fill="both", expand=True)
-
-    print("[MÓDULO UI] Desplegando interfaz gráfica de empleados...")
-    root.mainloop()
