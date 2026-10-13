@@ -68,8 +68,10 @@ class VentanaLogin(ttk.Frame):
         # 3. Lógica de validación visual.
         if usuario_validado:
             messagebox.showinfo("Éxito", f"Bienvenido, {usuario_validado.username}")
-            # Acá en la Semana 5 llamaremos al orquestador para abrir el 'ui_panel.py'.
             
+            # Acá en la Semana 5 llamaremos al orquestador para abrir el 'ui_panel.py'.
+            self.usuario_validado = usuario_validado
+
             # MODIFICACIÓN: Destruimos el padre ('parent') en lugar de 'root'.
             self.parent.destroy()
         else:

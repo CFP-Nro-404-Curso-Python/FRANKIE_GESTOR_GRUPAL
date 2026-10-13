@@ -147,5 +147,27 @@ Se desarrolló un script de pruebas automatizadas que ejecuta el flujo principal
 ### 7.2 Directiva Técnica: Resolución de Rutas (`sys.path`)
 Al trabajar con una estructura de carpetas modular (separando `src/` de `tests/`), ejecutar scripts de manera aislada genera el error `ModuleNotFoundError`. Para solucionar esto durante la fase de desarrollo, se implementó una inyección dinámica de rutas. Al inicio de cada archivo de prueba, o módulo visual que se desee ejecutar de forma independiente, se inyecta la ruta absoluta del directorio `src/` en el `sys.path`. Esto garantiza que Python reconozca nuestros paquetes internos sin importar desde qué directorio de la terminal se dispare la ejecución.
 
+## 8. Capa de Presentación: Orquestador y Panel Principal (Semana 3)
+
+**Archivos:** `main.py` y `src/vistas/ui_panel.py`
+**Objetivo:** Desarrollar el punto de entrada único de la aplicación y el contenedor visual principal que alojará las pantallas de todos los módulos.
+
+### 8.1 El Orquestador (`main.py`)
+El archivo raíz funciona como el director del ciclo de vida del sistema. No contiene lógica de negocio; su misión es levantar la ventana de Login, pausar la ejecución a la espera de la interacción del usuario y, si la autenticación es exitosa, recuperar la Entidad `Usuario` validada para inyectarla en el Panel Principal.
+
+**Directiva de Ejecución (Para todo el equipo):**
+A partir de la Semana 3, queda sin efecto la ejecución aislada de scripts visuales para pruebas de integración. El sistema completo debe inicializarse **exclusivamente** ejecutando `main.py` desde la raíz del proyecto.
+
+### 8.2 El Panel Principal (`ui_panel.py`)
+Diseñado como un esqueleto (Mock), el panel consta de un menú lateral estático (`pack_propagate(False)`) y un área de trabajo central dinámica. Su propósito principal es mitigar el riesgo de cuello de botella (Riesgo R-03), proveyendo a los Módulos 2, 3 y 4 de un contenedor funcional donde inyectar sus interfaces sin depender de la finalización del Control de Acceso (RBAC).
+
+### 8.3 Especificaciones Técnicas de Integración
+*   **Gestión del Estado de Sesión:** En `ui_login.py`, tras una validación positiva con `repo_core.py`, la Entidad `Usuario` se almacena temporalmente en la vista antes de destruirla. El orquestador `main.py` captura este objeto y lo transfiere como argumento al instanciar `PanelPrincipal`, permitiendo que el sistema reconozca globalmente los datos y roles del usuario activo.
+*   **Patrón Lazy Loading (Importaciones Perezosas):** Para optimizar el tiempo de arranque y el consumo de RAM, las vistas desarrolladas por los demás módulos (ej. `ui_empleados.py`) no se importan en la cabecera de `ui_panel.py`. En su lugar, el `import` se ejecuta localmente dentro de la función disparada por el botón del menú (ej. `_cargar_pantalla_empleados`).
+*   **Inyección de Vistas (Área de Trabajo):** Al instanciar pantallas de otros módulos (ej. `InterfazRRHH`), se les pasa como argumento el contenedor central del panel (`self.frame_trabajo`). Esto instruye a Tkinter para que dibuje la nueva interfaz dentro de los límites de ese contenedor específico, en lugar de abrir una ventana emergente separada.
+
+### 8.4 Directiva de Integración Continua (Módulos 2, 3 y 4)
+Uriel y Alicia deben continuar desarrollando sus respectivas pantallas (`ui_clientes.py`, `ui_inventario.py`, etc.) de forma completamente aislada, respetando la estructura de clases (`ttk.Frame`). El líder del Módulo 1 será el único responsable de importar dichas vistas y acoplarlas al menú de navegación del Panel Principal.
+
 ---
 *(Los siguientes apartados se irán completando a medida que desarrollemos cada componente de la Infraestructura y el Módulo 1).*
