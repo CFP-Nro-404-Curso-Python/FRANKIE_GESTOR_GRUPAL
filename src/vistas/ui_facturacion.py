@@ -1,212 +1,170 @@
-import sys
-import sqlite3
-from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
-                             QHBoxLayout, QLabel, QLineEdit, QPushButton, 
-                             QTableWidget, QTableWidgetItem, QHeaderView, QMessageBox)
-
-# ==========================================
-# 1. CAPA DE SERVICIO / BASE DE DATOS
-# ==========================================
-class FacturacionService:
-    """Maneja exclusivamente la comunicación con la base de datos."""
-    def __init__(self, db_name: str = "frankie_gestor.db"):
-        self.db_name = db_name
-
-    def guardar_factura(self, id_cliente: int, id_vendedor: int, detalles: list) -> int:
-        """Guarda la cabecera y el detalle en una sola transacción."""
-        conexion = sqlite3.connect(self.db_name)
-        try:
-            conexion.execute("PRAGMA foreign_keys = ON;")
-            cursor = conexion.cursor()
-
-            # Insertar cabecera
-            cursor.execute(
-                "INSERT INTO facturas (id_cliente, id_vendedor) VALUES (?, ?)", 
-                (id_cliente, id_vendedor)
-            )
-            id_factura = cursor.lastrowid
-
-            # Insertar detalles
-            for item in detalles:
-                cursor.execute(
-                    """INSERT INTO facturas_detalles 
-                       (id_factura, id_producto, cantidad, precio_unitario, descuento_porcentaje) 
-                       VALUES (?, ?, ?, ?, ?)""",
-                    (id_factura, item['id_producto'], item['cantidad'], item['precio'], item['descuento'])
-                )
-
-            conexion.commit()
-            return id_factura
-
-        except Exception as e:
-            conexion.rollback()
-            raise e  # Lanza la excepción para que la UI la maneje
-        
-        finally:
-            conexion.close()
+import tkinter as tk
+from tkinter import ttk, messagebox
 
 
-# ==========================================
-# 2. CAPA DE INTERFAZ GRÁFICA (UI)
-# ==========================================
-class UiFacturacion(QMainWindow):
-    def __init__(self, db_service: FacturacionService):
-        super().__init__()
-        self.db_service = db_service
+class UiFacturacion(ttk.Frame):
+    """
+    Vista de Facturación integrada al Panel Principal de Tkinter.
+    Hereda de ttk.Frame para insertarse dinámicamente en el contenedor central.
+    """
+    def __init__(self, parent, repo_ventas):
+        super().__init__(parent)
+        self.repo_ventas = repo_ventas
+        self.detalles_temporales = []
         self.total_visual = 0.0
 
-        self.setWindowTitle("Frankie Gestor - Nueva Factura")
-        self.resize(700, 500)
         self._configurar_ui()
 
-    # --- MÉTODOS DE CONFIGURACIÓN VISUAL ---
     def _configurar_ui(self):
-        widget_central = QWidget()
-        layout_principal = QVBoxLayout(widget_central)
+        # Configurar expansión del frame principal
+        self.columnconfigure(0, weight=1)
+        self.rowconfigure(2, weight=1)
 
-        layout_principal.addLayout(self._crear_encabezado())
-        layout_principal.addLayout(self._crear_panel_ingreso())
-        
-        self.tabla_detalles = self._crear_tabla()
-        layout_principal.addWidget(self.tabla_detalles)
-        
-        layout_principal.addLayout(self._crear_pie())
+        # --- 1. ENCABEZADO (Cliente y Vendedor) ---
+        frame_encabezado = ttk.LabelFrame(self, text="Datos de la Factura", padding=10)
+        frame_encabezado.grid(row=0, column=0, padx=10, pady=5, sticky="ew")
 
-        self.setCentralWidget(widget_central)
+        ttk.Label(frame_encabezado, text="ID Cliente:").grid(row=0, column=0, padx=5, pady=5)
+        self.txt_id_cliente = ttk.Entry(frame_encabezado, width=15)
+        self.txt_id_cliente.grid(row=0, column=1, padx=5, pady=5)
 
-    def _crear_encabezado(self):
-        layout = QHBoxLayout()
-        self.txt_id_cliente = QLineEdit(placeholderText="ID Cliente")
-        self.txt_id_vendedor = QLineEdit(placeholderText="ID Vendedor")
-        
-        layout.addWidget(QLabel("Cliente (ID):"))
-        layout.addWidget(self.txt_id_cliente)
-        layout.addWidget(QLabel("Vendedor (ID):"))
-        layout.addWidget(self.txt_id_vendedor)
-        return layout
+        ttk.Label(frame_encabezado, text="ID Vendedor:").grid(row=0, column=2, padx=5, pady=5)
+        self.txt_id_vendedor = ttk.Entry(frame_encabezado, width=15)
+        self.txt_id_vendedor.grid(row=0, column=3, padx=5, pady=5)
 
-    def _crear_panel_ingreso(self):
-        layout = QHBoxLayout()
-        self.txt_id_producto = QLineEdit(placeholderText="ID Producto")
-        self.txt_cantidad = QLineEdit(placeholderText="Cantidad")
-        self.txt_precio = QLineEdit(placeholderText="Precio Unitario")
-        self.txt_descuento = QLineEdit(placeholderText="% Desc (Ej: 10)")
-        
-        btn_agregar = QPushButton("Agregar a Lista")
-        btn_agregar.clicked.connect(self.agregar_producto)
+        # --- 2. PANEL DE INGRESO (Productos) ---
+        frame_inputs = ttk.LabelFrame(self, text="Agregar Ítem", padding=10)
+        frame_inputs.grid(row=1, column=0, padx=10, pady=5, sticky="ew")
 
-        layout.addWidget(self.txt_id_producto)
-        layout.addWidget(self.txt_cantidad)
-        layout.addWidget(self.txt_precio)
-        layout.addWidget(self.txt_descuento)
-        layout.addWidget(btn_agregar)
-        return layout
+        ttk.Label(frame_inputs, text="ID Prod:").grid(row=0, column=0, padx=2)
+        self.txt_id_producto = ttk.Entry(frame_inputs, width=10)
+        self.txt_id_producto.grid(row=0, column=1, padx=4)
 
-    def _crear_tabla(self):
-        tabla = QTableWidget(0, 5)
-        tabla.setHorizontalHeaderLabels(["ID Prod.", "Cantidad", "Precio U.", "% Desc.", "Subtotal"])
-        tabla.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        return tabla
+        ttk.Label(frame_inputs, text="Cant:").grid(row=0, column=2, padx=2)
+        self.txt_cantidad = ttk.Entry(frame_inputs, width=8)
+        self.txt_cantidad.grid(row=0, column=3, padx=4)
 
-    def _crear_pie(self):
-        layout = QHBoxLayout()
-        self.lbl_total = QLabel("Total Estimado: $0.00")
-        self.lbl_total.setStyleSheet("font-size: 18px; font-weight: bold; color: blue;")
-        
-        btn_guardar = QPushButton("CONFIRMAR Y GUARDAR FACTURA")
-        btn_guardar.setStyleSheet("background-color: #4CAF50; color: white; font-weight: bold; padding: 10px;")
-        btn_guardar.clicked.connect(self.procesar_guardado)
+        ttk.Label(frame_inputs, text="Precio U:").grid(row=0, column=4, padx=2)
+        self.txt_precio = ttk.Entry(frame_inputs, width=10)
+        self.txt_precio.grid(row=0, column=5, padx=4)
 
-        layout.addStretch()
-        layout.addWidget(self.lbl_total)
-        layout.addWidget(btn_guardar)
-        return layout
+        ttk.Label(frame_inputs, text="% Desc:").grid(row=0, column=6, padx=2)
+        self.txt_descuento = ttk.Entry(frame_inputs, width=8)
+        self.txt_descuento.grid(row=0, column=7, padx=4)
 
-    # --- LÓGICA DE INTERACCIÓN ---
+        btn_agregar = ttk.Button(frame_inputs, text="Agregar a Lista", command=self.agregar_producto)
+        btn_agregar.grid(row=0, column=8, padx=8)
+
+        # --- 3. TABLA DE DETALLES (Treeview) ---
+        frame_tabla = ttk.Frame(self, padding=10)
+        frame_tabla.grid(row=2, column=0, padx=10, pady=5, sticky="nsew")
+        frame_tabla.columnconfigure(0, weight=1)
+        frame_tabla.rowconfigure(0, weight=1)
+
+        columnas = ("id_prod", "cant", "precio", "desc", "subtotal")
+        self.tabla_detalles = ttk.Treeview(frame_tabla, columns=columnas, show="headings")
+
+        self.tabla_detalles.heading("id_prod", text="ID Producto")
+        self.tabla_detalles.heading("cant", text="Cantidad")
+        self.tabla_detalles.heading("precio", text="Precio U.")
+        self.tabla_detalles.heading("desc", text="% Desc.")
+        self.tabla_detalles.heading("subtotal", text="Subtotal")
+
+        self.tabla_detalles.column("id_prod", anchor="center", width=100)
+        self.tabla_detalles.column("cant", anchor="center", width=80)
+        self.tabla_detalles.column("precio", anchor="e", width=100)
+        self.tabla_detalles.column("desc", anchor="center", width=80)
+        self.tabla_detalles.column("subtotal", anchor="e", width=120)
+
+        scrollbar = ttk.Scrollbar(frame_tabla, orient="vertical", command=self.tabla_detalles.yview)
+        self.tabla_detalles.configure(yscrollcommand=scrollbar.set)
+
+        self.tabla_detalles.grid(row=0, column=0, sticky="nsew")
+        scrollbar.grid(row=0, column=1, sticky="ns")
+
+        # --- 4. PIE (Total y Confirmación) ---
+        frame_pie = ttk.Frame(self, padding=10)
+        frame_pie.grid(row=3, column=0, padx=10, pady=5, sticky="ew")
+
+        self.lbl_total = ttk.Label(frame_pie, text="Total Estimado: $0.00", font=("Arial", 12, "bold"))
+        self.lbl_total.pack(side="left")
+
+        btn_guardar = ttk.Button(frame_pie, text="CONFIRMAR Y GUARDAR FACTURA", command=self.procesar_guardado)
+        btn_guardar.pack(side="right")
+
+    # --- LÓGICA DE INTERFAZ ---
     def agregar_producto(self):
-        """Valida y agrega visualmente el ítem a la tabla."""
-        id_producto = self.txt_id_producto.text().strip()
-        
-        if not id_producto:
-            QMessageBox.warning(self, "Error", "Debe ingresar el ID del producto.")
+        id_prod = self.txt_id_producto.get().strip()
+        if not id_prod:
+            messagebox.showwarning("Error", "Debe ingresar el ID del producto.")
             return
 
         try:
-            cantidad = int(self.txt_cantidad.text())
-            precio = float(self.txt_precio.text())
-            descuento = float(self.txt_descuento.text() or 0.0)
+            cant = int(self.txt_cantidad.get().strip())
+            precio = float(self.txt_precio.get().strip())
+            desc = float(self.txt_descuento.get().strip() or 0.0)
         except ValueError:
-            QMessageBox.warning(self, "Error de formato", "Cantidad debe ser entero. Precio y Descuento numéricos.")
+            messagebox.showwarning("Error de Formato", "Cantidad debe ser entero. Precio y Descuento numéricos.")
             return
 
-        subtotal = (cantidad * precio) * (1 - (descuento / 100.0))
+        subtotal = (cant * precio) * (1 - (desc / 100.0))
         self.total_visual += subtotal
 
-        # Insertar en tabla
-        fila = self.tabla_detalles.rowCount()
-        self.tabla_detalles.insertRow(fila)
-        datos_fila = [id_producto, str(cantidad), str(precio), str(descuento), f"{subtotal:.2f}"]
-        
-        for col, texto in enumerate(datos_fila):
-            self.tabla_detalles.setItem(fila, col, QTableWidgetItem(texto))
+        # Guardar en memoria temporal de la UI
+        item_detalle = {
+            'id_producto': int(id_prod),
+            'cantidad': cant,
+            'precio': precio,
+            'descuento': desc
+        }
+        self.detalles_temporales.append(item_detalle)
 
-        # Actualizar UI
-        self.lbl_total.setText(f"Total Estimado: ${self.total_visual:.2f}")
-        for txt in (self.txt_id_producto, self.txt_cantidad, self.txt_precio, self.txt_descuento):
-            txt.clear()
-        self.txt_id_producto.setFocus()
+        # Insertar en la tabla de Tkinter
+        self.tabla_detalles.insert("", "end", values=(id_prod, cant, f"${precio:.2f}", f"{desc}%", f"${subtotal:.2f}"))
+
+        self.lbl_total.config(text=f"Total Estimado: ${self.total_visual:.2f}")
+        self._limpiar_inputs()
 
     def procesar_guardado(self):
-        """Recolecta los datos de la UI y los envía al servicio de Base de Datos."""
-        id_cliente = self.txt_id_cliente.text().strip()
-        id_vendedor = self.txt_id_vendedor.text().strip()
+        id_cliente = self.txt_id_cliente.get().strip()
+        id_vendedor = self.txt_id_vendedor.get().strip()
 
         if not id_cliente or not id_vendedor:
-            QMessageBox.warning(self, "Faltan datos", "Debe ingresar el ID del Cliente y del Vendedor.")
-            return
-            
-        if self.tabla_detalles.rowCount() == 0:
-            QMessageBox.warning(self, "Factura vacía", "Debe agregar al menos un producto.")
+            messagebox.showwarning("Faltan Datos", "Debe ingresar el ID del Cliente y del Vendedor.")
             return
 
-        # Recolectar detalles de la tabla a una lista de diccionarios
-        detalles = []
-        for i in range(self.tabla_detalles.rowCount()):
-            detalles.append({
-                'id_producto': int(self.tabla_detalles.item(i, 0).text()),
-                'cantidad': int(self.tabla_detalles.item(i, 1).text()),
-                'precio': float(self.tabla_detalles.item(i, 2).text()),
-                'descuento': float(self.tabla_detalles.item(i, 3).text())
-            })
+        if not self.detalles_temporales:
+            messagebox.showwarning("Factura Vacía", "Debe agregar al menos un producto a la lista.")
+            return
 
-        # Llamar al servicio para guardar
+        # Llamada al Repositorio (Infraestructura)
         try:
-            id_factura = self.db_service.guardar_factura(int(id_cliente), int(id_vendedor), detalles)
-            QMessageBox.information(self, "Éxito", f"Factura {id_factura} guardada correctamente.")
+            id_factura = self.repo_ventas.guardar_factura(
+                id_cliente=int(id_cliente),
+                id_vendedor=int(id_vendedor),
+                detalles=self.detalles_temporales
+            )
+            messagebox.showinfo("Éxito", f"Factura #{id_factura} guardada correctamente.")
             self._limpiar_todo()
-            
-        except sqlite3.IntegrityError as e:
-            QMessageBox.critical(self, "Error de Integridad", f"Revise que los IDs existan:\n{str(e)}")
-        except sqlite3.DatabaseError as e:
-            QMessageBox.critical(self, "Error en Base de Datos", f"Operación cancelada por la BD:\n{str(e)}")
+
+        except ValueError as e:
+            messagebox.showwarning("Atención", str(e))
         except Exception as e:
-            QMessageBox.critical(self, "Error Inesperado", str(e))
+            messagebox.showerror("Error de Sistema", f"No se pudo guardar la factura:\n{str(e)}")
+
+    def _limpiar_inputs(self):
+        self.txt_id_producto.delete(0, tk.END)
+        self.txt_cantidad.delete(0, tk.END)
+        self.txt_precio.delete(0, tk.END)
+        self.txt_descuento.delete(0, tk.END)
+        self.txt_id_producto.focus()
 
     def _limpiar_todo(self):
-        self.txt_id_cliente.clear()
-        self.tabla_detalles.setRowCount(0)
+        self.txt_id_cliente.delete(0, tk.END)
+        self.txt_id_vendedor.delete(0, tk.END)
+        self._limpiar_inputs()
+        self.detalles_temporales.clear()
         self.total_visual = 0.0
-        self.lbl_total.setText("Total Estimado: $0.00")
-
-# ==========================================
-# 3. PUNTO DE ENTRADA (MAIN)
-# ==========================================
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    
-    # Inyectamos el servicio en la UI
-    servicio_bd = FacturacionService("frankie_gestor.db")
-    ventana = UiFacturacion(servicio_bd)
-    
-    ventana.show()
-    sys.exit(app.exec())
+        self.lbl_total.config(text="Total Estimado: $0.00")
+        for fila in self.tabla_detalles.get_children():
+            self.tabla_detalles.delete(fila)
