@@ -129,5 +129,39 @@ Tkinter es propenso a generar "código espagueti" si no se estructura correctame
 2.  **Diseño Orientado a Objetos (Clases obligatorias):** No se debe escribir código Tkinter suelto en el archivo. Toda pantalla nueva debe estar encapsulada en una Clase (ej. `class VentanaInventario:`). Esto aísla el entorno y evita colisiones de variables.
 3.  **Separar Dibujo de Lógica:** Las clases visuales deben tener un método dedicado exclusivamente a renderizar componentes (ej. `_dibujar_interfaz()`), y métodos separados para ejecutar acciones (ej. `guardar_cliente()`).
 
+## 7. Capa de Vistas: Panel Principal y Orquestación (Semana 3)
+
+**Archivo:** `src/vistas/ui_panel.py`
+**Objetivo:** Actuar como el contenedor principal (chasis) del sistema, proporcionando un menú de navegación lateral (RBAC) y un área de trabajo central dinámica donde se renderizan los módulos de forma independiente.
+
+### 7.1 El Chasis de la Aplicación
+El Panel Principal utiliza el gestor de geometría `Grid` para dividir la pantalla en dos sectores inmutables:
+*   **Menú Lateral (Columna 0):** Un panel estático y fijo que contiene los botones de acceso a cada módulo.
+*   **Área Central (Columna 1):** Un contenedor dinámico configurado con `weight=1` para que absorba todo el espacio disponible al maximizar la ventana. Aquí es donde se "enchufan" las interfaces construidas por el resto del equipo.
+
+### 7.2 Especificaciones Técnicas Implementadas
+*   **Limpieza de Memoria en Interfaz (`limpiar_area_central()`):** Antes de cargar una nueva pantalla en el área de trabajo, se itera sobre los widgets existentes (`winfo_children()`) y se los destruye. Esto previene el apilamiento de frames invisibles que colapsarían la memoria RAM.
+*   **Inyección de Dependencias Visuales:** Para mantener la Arquitectura Limpia, el panel no conoce el código interno de las vistas de Recursos Humanos o Ventas. Simplemente importa la clase principal del módulo (ej. `InterfazRRHH`) y le pasa como parámetro el contenedor en blanco (`frame_contenido`), indicándole que se dibuje allí adentro.
+
+### 7.3 Directiva de Integración para el Equipo
+Para que Uriel y Alicia integren sus respectivos módulos al Panel Principal, el flujo es estricto y sencillo:
+1. Importar la clase principal de su vista al inicio de `ui_panel.py`.
+2. Crear un método dedicado (ej. `abrir_modulo_ventas()`) que llame a `limpiar_area_central()` y luego instancie su clase pasándole `self.frame_contenido`.
+3. Agregar un nuevo `ttk.Button` en el menú lateral que dispare ese método. Queda estrictamente prohibido alterar la geometría base o el sistema de grillas del contenedor general.
+
+
+## 8. Controlador Central: Punto de Entrada (Semana 3)
+
+**Archivo:** `main.py`
+**Objetivo:** Archivo ejecutable raíz del sistema. Orquesta el ciclo de vida de la aplicación, controlando la transición entre la validación de credenciales (Login) y el acceso al sistema (Panel).
+
+### 8.1 El Switchboard de la Aplicación
+`main.py` es el único script diseñado para ser ejecutado directamente. Funciona como el orquestador principal: arranca los motores del entorno gráfico, levanta la ventana de autenticación y se queda en pausa. Solo si el usuario supera la validación con la base de datos, destruye el acceso y despliega el Panel Principal.
+
+### 8.2 Especificaciones Técnicas Implementadas
+*   **Inyección de Rutas en Tiempo de Ejecución:** Para evitar errores de "Módulo no encontrado" al compartir código o ejecutarlo desde distintas terminales, se utiliza `sys.path.insert()` combinado con la librería `pathlib` para localizar dinámicamente la carpeta `src/` e inyectarla en el entorno de Python antes de iniciar los imports.
+*   **Intercepción de Eventos (Sobrescritura de `destroy`):** Tkinter borra los datos de los campos de texto apenas se destruye la ventana. Para validar el login de forma segura, se sobreescribió el método `destroy` del popup de acceso. Cuando el usuario intenta loguearse, el script intercepta la acción, captura las credenciales tipeadas, las manda al Repositorio Core, y recién entonces permite el cierre de la ventana.
+*   **Ventanas Superpuestas (`Toplevel` y `withdraw`):** El motor `tk.Tk()` inicia siempre una ventana principal en blanco. El orquestador oculta esta ventana inmediatamente usando `withdraw()`, dibuja el Login como una ventana secundaria flotante (`Toplevel`), y al aprobar el acceso, vuelve a mostrar la ventana principal con `deiconify()`, ya poblada con el entorno del Panel Principal.
+
 ---
 *(Los siguientes apartados se irán completando a medida que desarrollemos cada componente de la Infraestructura y el Módulo 1).*
