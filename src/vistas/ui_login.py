@@ -1,57 +1,44 @@
-import sys
-import os
 import tkinter as tk
 # AGREGADO: Importamos ttk para usar los componentes estilizados.
-from tkinter import ttk, messagebox
-
-# FIX DE RUTAS: Le enseñamos a Python dónde está la carpeta 'src' 
-# para que pueda encontrar 'infraestructura' al ejecutar este script suelto.
-ruta_src = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-if ruta_src not in sys.path:
-    sys.path.insert(0, ruta_src)
-
+from tkinter import ttk, messagebox 
 from infraestructura.repo_core import RepoCore
 # AGREGADO: Importamos los estilos de Alicia.
 from vistas.estilos import aplicar_estilos_base 
 
 
-
-# MODIFICACIÓN: 
-# ANTES: class VentanaLogin:
-# DESPUÉS: Heredamos de ttk.Frame para aislar el componente visual.
-class VentanaLogin(ttk.Frame):
+class VentanaLogin:
     """
     Capa Visual (Vista) para el ingreso al sistema.
-    Hereda de ttk.Frame para integrarse limpiamente con la arquitectura de la UI.
+    Solamente dibuja la pantalla y captura los clicks del usuario.
     """
-    def __init__(self, parent, *args, **kwargs):
-        super().__init__(parent, *args, **kwargs)
-        self.parent = parent
-        self.parent.title("Frankie Gestor - Acceso")
-        self.parent.geometry("300x250")
-        self.parent.resizable(False, False)
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Frankie Gestor - Acceso")
+        self.root.geometry("300x250")
+        self.root.resizable(False, False)
 
-        # # MODIFICACIÓN: Empaquetamos el frame para que tome el control del espacio.
-        self.pack(fill="both", expand=True, padx=20, pady=20)
-        
+        # Contador de seguridad (regla de negocio simple que podemos manejar acá).
         self.intentos_fallidos = 0
+
         self._dibujar_interfaz()
 
     def _dibujar_interfaz(self):
-        # MODIFICACIÓN: 
-        # ANTES: ttk.Label(self.root, ...).
-        # DESPUÉS: Al ser un Frame, los elementos se pegan directamente a 'self'.
-        ttk.Label(self, text="Usuario:").pack(pady=(5, 5))
-        self.entry_usuario = ttk.Entry(self)
+        # Etiquetas y Cajas de texto.
+        # MODIFICADO: Cambiamos tk.Label por ttk.Label y tk.Entry por ttk.Entry para heredar el CSS.
+        ttk.Label(self.root, text="Usuario:").pack(pady=(20, 5))
+        self.entry_usuario = ttk.Entry(self.root)
         self.entry_usuario.pack()
 
-        ttk.Label(self, text="Contraseña:").pack(pady=(10, 5))
-        self.entry_password = ttk.Entry(self, show="*")
+        ttk.Label(self.root, text="Contraseña:").pack(pady=(10, 5))
+        # show="*" oculta los caracteres tipeados por seguridad.
+        self.entry_password = ttk.Entry(self.root, show="*")
         self.entry_password.pack()
 
-        self.btn_ingresar = ttk.Button(self, text="Ingresar", command=self.procesar_login)
+        # Botón de ingreso (El 'command' vincula el click con nuestra función).
+        # MODIFICADO: Cambiamos tk.Button por ttk.Button.
+        self.btn_ingresar = ttk.Button(self.root, text="Ingresar", command=self.procesar_login)
         self.btn_ingresar.pack(pady=20)
-    
+
     def procesar_login(self):
         # 1. Capturamos lo que el usuario escribió.
         usuario_tipeado = self.entry_usuario.get()
@@ -68,12 +55,8 @@ class VentanaLogin(ttk.Frame):
         # 3. Lógica de validación visual.
         if usuario_validado:
             messagebox.showinfo("Éxito", f"Bienvenido, {usuario_validado.username}")
-            
             # Acá en la Semana 5 llamaremos al orquestador para abrir el 'ui_panel.py'.
-            self.usuario_validado = usuario_validado
-
-            # MODIFICACIÓN: Destruimos el padre ('parent') en lugar de 'root'.
-            self.parent.destroy()
+            self.root.destroy() 
         else:
             self.intentos_fallidos += 1
             intentos_restantes = 3 - self.intentos_fallidos

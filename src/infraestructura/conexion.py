@@ -2,7 +2,6 @@ import sqlite3
 import os
 
 
-
 class ConexionDB:
     """
     Patrón Singleton: Garantiza que toda la aplicación use una única conexión a la base de datos.
