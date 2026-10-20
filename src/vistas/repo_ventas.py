@@ -1,42 +1,67 @@
-import sqlite3
-# Asumiendo que tu proyecto maneja las conexiones mediante un Context Manager centralizado
-from src.infraestructura.conexion import ConexionDB
+from infraestructura.conexion import obtener_conexion
 
-class RepositorioVentas:
-    """
-    Capa de Acceso a Datos (Infraestructura) para el Módulo de Ventas.
-    Usa el gestor centralizado ConexionDB para evitar bloqueos de concurrencia en SQLite.
-    """
-    def guardar_factura(self, id_cliente: int, id_vendedor: int, detalles: list) -> int:
-        if not detalles:
-            raise ValueError("La factura no contiene ítems para guardar.")
 
-        # Uso del gestor central con Context Manager (Punto 3 de la corrección)
-        with ConexionDB() as db:
-            cursor = db.cursor()
-            
-            try:
-                # 1. Insertar Cabecera de Factura
-                cursor.execute(
-                    "INSERT INTO facturas (id_cliente, id_vendedor) VALUES (?, ?)",
-                    (id_cliente, id_vendedor)
-                )
-                id_factura = cursor.lastrowid
+def obtener_clientes():
+    """Trae la lista de clientes desde la BD para poblar selectores en la UI."""
+    conexion = obtener_conexion()
+    cursor = conexion.cursor(dictionary=True)
+    try:
+        query = "SELECT id, nombre, apellido, cuit FROM clientes"
+        cursor.execute(query)
+        return cursor.fetchall()
+    except Exception as e:
+        print(f"Error al obtener clientes: {e}")
+        return []
+    finally:
+        cursor.close()
+        conexion.close()
 
-                # 2. Insertar Detalle de Factura
-                for item in detalles:
-                    cursor.execute(
-                        """INSERT INTO facturas_detalles 
-                           (id_factura, id_producto, cantidad, precio_unitario, descuento_porcentaje) 
-                           VALUES (?, ?, ?, ?, ?)""",
-                        (id_factura, item['id_producto'], item['cantidad'], item['precio'], item['descuento'])
-                    )
 
-                # Si todo está bien dentro del bloque 'with', la conexión confirma la transacción
-                return id_factura
+def obtener_productos_disponibles():
+    """Trae productos con stock disponible para facturar."""
+    conexion = obtener_conexion()
+    cursor = conexion.cursor(dictionary=True)
+    try:
+        query = "SELECT id, nombre, precio, stock FROM productos WHERE stock > 0"
+        cursor.execute(query)
+        return cursor.fetchall()
+    except Exception as e:
+        print(f"Error al obtener productos: {e}")
+        return []
+    finally:
+        cursor.close()
+        conexion.close()
 
-            except sqlite3.IntegrityError as e:
-                raise ValueError(f"Error de integridad: Verifique que Cliente ({id_cliente}), Vendedor ({id_vendedor}) y Productos existan.")
-            except sqlite3.DatabaseError as e:
-                # Captura el RAISE(ABORT) emitido por el Trigger de Stock Insuficiente
-                raise ValueError(f"Rechazado por la Base de Datos: {str(e)}")
+
+def guardar_factura(id_cliente, total, detalles):
+    """Guarda la cabecera de la factura y cada uno de sus ítems (detalles)."""
+    conexion = obtener_conexion()
+    cursor = conexion.cursor()
+    try:
+        # Insertar cabecera de factura
+        sql_factura = "INSERT INTO facturas (id_cliente, fecha, total, estado) VALUES (%s, NOW(), %s, 'Emitida')"
+        cursor.execute(sql_factura, (id_cliente, total))
+        id_factura = cursor.lastrowid
+
+        # Insertar ítems
+        sql_detalle = "INSERT INTO detalles_factura (id_factura, id_producto, cantidad, precio_unitario) VALUES (%s, %s, %s, %s)"
+        for item in detalles:
+            cursor.execute(
+                sql_detalle,
+                (
+                    id_factura,
+                    item["id_producto"],
+                    item["cantidad"],
+                    item["precio_unitario"],
+                ),
+            )
+
+        conexion.commit()
+        return id_factura
+    except Exception as e:
+        conexion.rollback()
+        print(f"Error al guardar factura: {e}")
+        return None
+    finally:
+        cursor.close()
+        conexion.close()
