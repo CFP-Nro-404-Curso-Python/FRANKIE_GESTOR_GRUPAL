@@ -36,11 +36,11 @@ CREATE TABLE IF NOT EXISTS usuarios_roles (
 -- Centraliza los datos de contacto. Empleados, Clientes y Proveedores heredarán de esta.
 CREATE TABLE IF NOT EXISTS personas (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    tipo_persona TEXT NOT NULL, -- Sustituye al ENUM ('Fisica', 'Juridica')
+    tipo_persona TEXT NOT NULL, -- Sustituye al ENUM ('Fisica', 'Juridica').
     nombres TEXT,
     apellidos TEXT,
     razon_social TEXT,
-    tipo_documento TEXT NOT NULL, -- Sustituye al ENUM ('DNI', 'CUIT', 'CUIL', 'Pasaporte')
+    tipo_documento TEXT NOT NULL, -- Sustituye al ENUM ('DNI', 'CUIT', 'CUIL', 'Pasaporte').
     nro_documento TEXT NOT NULL UNIQUE,
     telefono TEXT,
     email TEXT,
@@ -110,7 +110,7 @@ CREATE TABLE IF NOT EXISTS productos (
     FOREIGN KEY (id_proveedor) REFERENCES proveedores(id) ON DELETE RESTRICT
 );
 
--- 9. TABLA FACTURAS (Cabecera)
+-- 9. TABLA FACTURAS (Cabecera).
 CREATE TABLE IF NOT EXISTS facturas (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     fecha DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -121,7 +121,7 @@ CREATE TABLE IF NOT EXISTS facturas (
     FOREIGN KEY (id_vendedor) REFERENCES empleados(id) ON DELETE RESTRICT
 );
 
--- 10. TABLA FACTURAS_DETALLES (Cuerpo)
+-- 10. TABLA FACTURAS_DETALLES (Cuerpo).
 CREATE TABLE IF NOT EXISTS facturas_detalles (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     id_factura INTEGER NOT NULL,
@@ -152,7 +152,7 @@ BEGIN
     WHERE id = NEW.id; -- Nota: En el paso BEFORE de SQLite, a veces hay que usar un enfoque lógico desde la app, pero este trigger asegura el cálculo a nivel BD.
 END;
 
--- TRIGGER 2: Valida el stock. Si no hay suficiente, arroja un error (ABORT) y frena el INSERT.
+-- TRIGGER 2: Valida el stock. Si no hay suficiente, arroja un error (ABORT) Y frena el INSERT.
 CREATE TRIGGER IF NOT EXISTS trg_validar_stock
 BEFORE INSERT ON facturas_detalles
 FOR EACH ROW
@@ -182,9 +182,13 @@ BEGIN
 END;
 
 
--- =========================================
---  SEMILLAS (Datos Iniciales Obligatorios)
--- =========================================
+-- ===================================================================================
+--  ⚠️ ATENCIÓN ALICIA Y URIEL: SEMILLAS Y SEGURIDAD
+-- ===================================================================================
+--
+--  1. NUNCA guarden contraseñas en texto plano. 
+--  2. La contraseña de este admin es 'admin123', pero acá guardamos su hash SHA-256.
+-- ===================================================================================
 
 INSERT OR IGNORE INTO roles (nombre, descripcion) VALUES
 ('Administrador', 'Control total del sistema'),
@@ -192,8 +196,9 @@ INSERT OR IGNORE INTO roles (nombre, descripcion) VALUES
 ('Empleado - Ventas', 'Acceso a clientes y facturación'),
 ('Empleado - Compras', 'Acceso a proveedores y stock');
 
+-- AGREGADO: Hash SHA-256 correspondiente a 'admin123'.
 INSERT OR IGNORE INTO usuarios (username, password, activo) VALUES
-('admin', 'admin123', 1);
+('admin', '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', 1);
 
 -- Vinculamos al usuario admin (ID 1) con el rol Administrador (ID 1).
 INSERT OR IGNORE INTO usuarios_roles (id_usuario, id_rol) VALUES (1, 1);
