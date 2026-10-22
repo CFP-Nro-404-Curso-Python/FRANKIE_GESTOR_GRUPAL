@@ -5,6 +5,7 @@
 **Arquitectura:** Clean Architecture (Arquitectura Limpia)
 **Tecnologías:** Python 3, SQLite3, Tkinter
 
+
 ## 1. Introducción y Alcance
 
 Este documento detalla el paso a paso del desarrollo correspondiente a las responsabilidades de infraestructura general y del Módulo 1. El objetivo de este módulo es sentar las bases operativas y de seguridad del sistema para que los Módulos 2 (RRHH), 3 (Ventas) y 4 (Inventario) puedan desarrollarse de forma paralela y autónoma.
@@ -61,7 +62,6 @@ def obtener_usuarios_activos():
     # Al salir de la indentación del 'with', se ejecuta el commit automáticamente.
     # No es necesario cerrar la conexión (db.close()).
 ```
-
 
 ## 4. Capa de Dominio: Entidades Core (Semana 2)
 
@@ -129,6 +129,7 @@ Tkinter es propenso a generar "código espagueti" si no se estructura correctame
 2.  **Diseño Orientado a Objetos (Clases obligatorias):** No se debe escribir código Tkinter suelto en el archivo. Toda pantalla nueva debe estar encapsulada en una Clase (ej. `class VentanaInventario:`). Esto aísla el entorno y evita colisiones de variables.
 3.  **Separar Dibujo de Lógica:** Las clases visuales deben tener un método dedicado exclusivamente a renderizar componentes (ej. `_dibujar_interfaz()`), y métodos separados para ejecutar acciones (ej. `guardar_cliente()`).
 
+
 ## 7. Capa de Vistas: Panel Principal y Orquestación (Semana 3)
 
 **Archivo:** `src/vistas/ui_panel.py`
@@ -162,6 +163,63 @@ Para que Uriel y Alicia integren sus respectivos módulos al Panel Principal, el
 *   **Inyección de Rutas en Tiempo de Ejecución:** Para evitar errores de "Módulo no encontrado" al compartir código o ejecutarlo desde distintas terminales, se utiliza `sys.path.insert()` combinado con la librería `pathlib` para localizar dinámicamente la carpeta `src/` e inyectarla en el entorno de Python antes de iniciar los imports.
 *   **Intercepción de Eventos (Sobrescritura de `destroy`):** Tkinter borra los datos de los campos de texto apenas se destruye la ventana. Para validar el login de forma segura, se sobreescribió el método `destroy` del popup de acceso. Cuando el usuario intenta loguearse, el script intercepta la acción, captura las credenciales tipeadas, las manda al Repositorio Core, y recién entonces permite el cierre de la ventana.
 *   **Ventanas Superpuestas (`Toplevel` y `withdraw`):** El motor `tk.Tk()` inicia siempre una ventana principal en blanco. El orquestador oculta esta ventana inmediatamente usando `withdraw()`, dibuja el Login como una ventana secundaria flotante (`Toplevel`), y al aprobar el acceso, vuelve a mostrar la ventana principal con `deiconify()`, ya poblada con el entorno del Panel Principal.
+
+
+## 9. Controlador Core: Copias de Seguridad en Caliente (Semana 4 - Adelanto)
+
+**Archivo:** `src/controladores/orquestador_core.py`
+**Objetivo:** Actuar como el "cerebro" del Módulo 1, aislando la lógica compleja de negocio y operando herramientas de seguridad de la base de datos sin comprometer la interfaz gráfica.
+
+### 9.1 Lógica de Hot Backup
+Se implementó un sistema de copia de seguridad en caliente utilizando el método nativo `.backup()` de la librería `sqlite3`. A diferencia de una copia de archivos tradicional (que corrompe la base de datos si ocurre mientras un usuario guarda información), este método clona los datos de forma transaccional y segura, sin necesidad de bloquear el sistema o desconectar a los usuarios (empleados facturando).
+
+### 9.2 Gestión Autónoma de Directorios
+Para evitar fallos de ejecución si el entorno es nuevo, el orquestador utiliza la librería `os` para verificar la existencia de la carpeta `db/backups`. Si no existe, el parámetro `exist_ok=True` de la función `os.makedirs()` la genera automáticamente. Además, se estandarizó la nomenclatura de los respaldos agregando un *timestamp* (`respaldo_frankie_YYYYMMDD_HHMMSS.db`) para evitar la sobrescritura de archivos.
+
+### 9.3 Directiva Arquitectónica para Controladores (Módulos 2, 3 y 4)
+Al momento de programar `orquestador_ventas.py` u `orquestador_rrhh.py`, el equipo debe respetar:
+1. **El Controlador Calcula, no Dibuja:** Prohibido importar `tkinter` o `messagebox`. El controlador devuelve valores puros (ej. un `string` con el mensaje de error o éxito, o un `float` con un cálculo de IVA). La Vista es quien decide cómo dibujarlo.
+2. **Centralización de la Matemática:** Cualquier operación de cálculo (descuentos, liquidaciones, sumatorias) se procesa en esta capa, no en los repositorios ni en las vistas.
+
+
+## 10. Refactorización del Panel Principal: Control de Acceso (RBAC)
+
+**Archivo:** `src/vistas/ui_panel.py`
+**Objetivo:** Inyectar la lógica de Control de Acceso Basado en Roles (RBAC) para habilitar o restringir módulos de la interfaz según los permisos del usuario logueado.
+
+### 10.1 Filtrado Dinámico de Interfaz
+Se modificó la renderización del menú lateral. En lugar de mostrar todos los botones por defecto, el sistema ahora itera sobre la lista `self.usuario_actual.roles` (cargada previamente por el Repositorio durante el Login). Mediante validaciones booleanas simples (ej. `es_admin = "Administrador" in nombres_roles`), el panel decide qué botones (`ttk.Button`) instanciar y empaquetar con `.pack()`. 
+
+*   **Ventas:** Solo accesible para Administradores, Gerentes y Empleados de Ventas.
+*   **Inventario/RRHH:** Restringido a perfiles de gestión y compras.
+*   **Backup del Sistema:** Acceso exclusivo y excluyente para el Administrador.
+
+
+## 11. Refactorización de Infraestructura: Despliegue Automatizado
+
+**Archivo:** `src/infraestructura/conexion.py`
+**Objetivo:** Modificar el motor Singleton para que detecte bases de datos vacías y autoconstruya la estructura relacional a partir del archivo DDL, eliminando la necesidad de configuración manual por parte de los desarrolladores.
+
+### 11.1 Auto-Inicialización del Esquema (`sqlite_master`)
+Se incorporó el método `_verificar_e_inicializar_esquema()`. Durante el arranque, el Singleton consulta la tabla oculta `sqlite_master` para verificar si existen tablas creadas. Si la base de datos es un archivo nuevo y en blanco, el motor lee el archivo `db/esquema.sql` y ejecuta todas las sentencias DDL (creación de tablas, constraints y triggers) e inserciones semilla (DML) de una sola vez utilizando `cursor.executescript()`.
+Esto garantiza que cualquier desarrollador (o cliente futuro) que clone el repositorio tenga el entorno de base de datos operativo en el primer milisegundo de ejecución, previniendo errores de "tabla no encontrada".
+
+
+## 12. Testing Unitario y Resolución Criptográfica
+
+**Archivos:** `tests/test_core.py` y `db/esquema.sql`
+**Objetivo:** Auditar la lógica de negocio y la persistencia de datos (Dominio, Infraestructura y Controladores) mediante `pytest` antes de la integración a la rama principal (main).
+
+### 12.1 Pruebas de Integración (Pytest)
+Se desarrollaron 6 pruebas unitarias que validan el comportamiento aislado y combinado del Módulo 1:
+1. **Singleton:** Verificación de instancia única de conexión en memoria (`test_singleton_conexion`).
+2. **Dominio:** Instanciación correcta de las entidades Usuario y Rol (`test_creacion_usuario_y_rol`).
+3. **Criptografía:** Validación de la longitud de salida (64 caracteres) del algoritmo SHA-256 (`test_hashing_password`).
+4. **Persistencia y Auth:** Validación del acceso exitoso y el rechazo ante credenciales inválidas (`test_autenticacion_exitosa`, `test_autenticacion_fallida`).
+5. **Orquestación:** Ejecución exitosa de la copia de seguridad y verificación de creación física del archivo en el disco (`test_ejecucion_backup`).
+
+### 12.2 Resolución de Fallo Criptográfico en Semilla
+Durante la ejecución de las pruebas, se detectó un desajuste entre el Repositorio (que encripta los ingresos en SHA-256) y el dato semilla del usuario 'admin' en `esquema.sql`, el cual estaba guardado en texto plano (`admin123`). Se refactorizó la sentencia `INSERT` en el DDL para almacenar directamente el hash criptográfico (`240be518fabd272...`), alineando la base de datos con los estándares de seguridad del sistema y logrando la aprobación total (PASSED) de la auditoría de software.
 
 ---
 *(Los siguientes apartados se irán completando a medida que desarrollemos cada componente de la Infraestructura y el Módulo 1).*
