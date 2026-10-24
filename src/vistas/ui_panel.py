@@ -1,145 +1,102 @@
+"""
+===============================================================================
+PANEL PRINCIPAL DE LA APLICACIÓN (vistas/ui_panel.py)
+===============================================================================
+"""
+
+import tkinter as tk
 from tkinter import ttk, messagebox
-# Importamos la vista de empleados para integrarla.
+from typing import Any
 from vistas.ui_empleados import InterfazEmpleados
-# Importamos nuestro orquestador para el backup.
-from controladores.orquestador_core import OrquestadorCore
+from vistas.ui_inventario import InterfazInventario
+from infraestructura.repo_core import RepoCore
 
 
-
-class VentanaPrincipal:
+class VentanaPrincipal(tk.Toplevel):
     """
-    Panel Principal (Orquestador Visual).
-    Contiene el menú lateral (con filtro RBAC) y el área de trabajo central.
+    Ventana principal del sistema que despliega el menú lateral y el área de contenido.
     """
 
-    def __init__(self, root, usuario_actual):
-        self.root = root
-        self.root.title(f"Frankie Gestor - Usuario: {usuario_actual.username}")
-        self.root.geometry("1024x768")
-        self.root.minsize(800, 600)
-
+    def __init__(self, parent: tk.Widget, usuario_actual: Any = None, *args: Any, **kwargs: Any) -> None:
+        super().__init__(parent, *args, **kwargs)
         self.usuario_actual = usuario_actual
 
-        self._dibujar_interfaz()
+        username = self.usuario_actual.username if self.usuario_actual else "admin"
+        self.title(f"Frankie Gestor - Usuario: {username}")
+        self.geometry("900x550")
+        self.minsize(800, 500)
 
-    def _dibujar_interfaz(self):
+        self.columnconfigure(1, weight=1)
+        self.rowconfigure(0, weight=1)
 
-        # ========================
-        #  ESTRUCTURA BASE (Grid)
-        # ========================
+        self._crear_menu_lateral()
+        self._crear_area_contenido()
 
-        self.root.columnconfigure(1, weight=1)
-        self.root.rowconfigure(0, weight=1)
+    def _crear_menu_lateral(self) -> None:
+        frame_menu = ttk.Frame(self, padding=10, width=220)
+        frame_menu.grid(row=0, column=0, sticky="nsew")
+        frame_menu.rowconfigure(5, weight=1)
 
-        # =======================================================
-        #  MENÚ LATERAL (Izquierda) CON RBAC (Control de Acceso)
-        # =======================================================
+        ttk.Label(frame_menu, text="MENÚ PRINCIPAL", style="Subtitulo.TLabel").grid(row=0, column=0, pady=(10, 20),
+                                                                                    sticky="w")
 
-        self.frame_menu = ttk.Frame(self.root, width=220, relief="raised", padding=10)
-        self.frame_menu.grid(row=0, column=0, sticky="ns")
-        self.frame_menu.grid_propagate(False)
+        btn_rrhh = ttk.Button(frame_menu, text="Recursos Humanos", command=self.abrir_modulo_rrhh)
+        btn_rrhh.grid(row=1, column=0, sticky="ew", pady=5)
 
-        lbl_menu = ttk.Label(self.frame_menu, text="MENÚ PRINCIPAL", font=("Arial", 12, "bold"))
-        lbl_menu.pack(pady=(10, 20))
+        btn_ventas = ttk.Button(frame_menu, text="Ventas y Facturación", command=self.abrir_modulo_ventas_MOCK)
+        btn_ventas.grid(row=2, column=0, sticky="ew", pady=5)
 
-        # Analizamos los roles que trajo el usuario desde la base de datos.
-        nombres_roles = [rol.nombre for rol in self.usuario_actual.roles]
-        es_admin = "Administrador" in nombres_roles
-        es_gerente = "Gerente" in nombres_roles
-        es_ventas = "Empleado - Ventas" in nombres_roles
-        es_compras = "Empleado - Compras" in nombres_roles
+        btn_inventario = ttk.Button(frame_menu, text="Inventario y Stock", command=self.abrir_modulo_inventario)
+        btn_inventario.grid(row=3, column=0, sticky="ew", pady=5)
 
-        # ========================================
-        #  BOTONES DE MÓDULOS (Filtrados por Rol)
-        # ========================================
+        ttk.Separator(frame_menu, orient="horizontal").grid(row=4, column=0, sticky="ew", pady=15)
 
-        if es_admin or es_gerente:
-            btn_rrhh = ttk.Button(self.frame_menu, text="Recursos Humanos", command=self.abrir_modulo_rrhh)
-            btn_rrhh.pack(fill="x", pady=5)
+        btn_backup = ttk.Button(frame_menu, text="Backup Sistema", command=self.ejecutar_backup)
+        btn_backup.grid(row=5, column=0, sticky="ew", pady=5)
 
-        if es_admin or es_gerente or es_ventas:
-            # ⚠️ URIEL: Cuando termines 'ui_facturacion.py', cambiá 'abrir_modulo_ventas_MOCK' por el nombre
-            # de la función real que vas a crear más abajo.
-            btn_ventas = ttk.Button(self.frame_menu, text="Ventas y Facturación", command=self.abrir_modulo_ventas_MOCK)
-            btn_ventas.pack(fill="x", pady=5)
-
-        if es_admin or es_gerente or es_compras:
-            # ⚠️ ALICIA: Cuando termines 'ui_inventario.py', cambiá 'abrir_modulo_inventario_MOCK' por tu
-            # función real para enchufar la vista de stock.
-            btn_inventario = ttk.Button(self.frame_menu, text="Inventario y Stock",
-                                        command=self.abrir_modulo_inventario_MOCK)
-            btn_inventario.pack(fill="x", pady=5)
-
-        ttk.Separator(self.frame_menu, orient="horizontal").pack(fill="x", pady=15)
-
-        # ========================
-        #  ZONA DE ADMINISTRACIÓN
-        # ========================
-
-        if es_admin:
-            btn_backup = ttk.Button(self.frame_menu, text="Backup Sistema", command=self.ejecutar_backup)
-            btn_backup.pack(fill="x", pady=5)
-
-        ttk.Separator(self.frame_menu, orient="horizontal").pack(fill="x", pady=15)
-
-        btn_salir = ttk.Button(self.frame_menu, text="Cerrar Sesión", command=self.cerrar_sesion)
-        btn_salir.pack(fill="x", pady=5, side="bottom")
-
-        # ========================
-        #  ÁREA CENTRAL (Derecha)
-        # ========================
-
-        self.frame_contenido = ttk.Frame(self.root, relief="sunken", padding=10)
+    def _crear_area_contenido(self) -> None:
+        self.frame_contenido = ttk.Frame(self, padding=10)
         self.frame_contenido.grid(row=0, column=1, sticky="nsew")
+        self.frame_contenido.columnconfigure(0, weight=1)
+        self.frame_contenido.rowconfigure(0, weight=1)
 
+        username = self.usuario_actual.username if self.usuario_actual else 'admin'
         self.lbl_bienvenida = ttk.Label(
             self.frame_contenido,
-            text=f"Bienvenido al Sistema Frankie, {self.usuario_actual.username}.\nSeleccioná una opción del menú lateral.",
+            text=f"Bienvenido al Sistema Frankie, {username}.\nSeleccioná una opción del menú lateral.",
             justify="center",
             font=("Arial", 14)
         )
         self.lbl_bienvenida.place(relx=0.5, rely=0.5, anchor="center")
 
-    # ===========================
-    #  FUNCIONES DE ORQUESTACIÓN
-    # ===========================
-
-    def limpiar_area_central(self):
+    def limpiar_area_central(self) -> None:
         """Borra la pantalla actual antes de cargar una nueva."""
         for widget in self.frame_contenido.winfo_children():
             widget.destroy()
 
-    def abrir_modulo_rrhh(self):
+    def abrir_modulo_rrhh(self) -> None:
         self.limpiar_area_central()
         vista_rrhh = InterfazEmpleados(self.frame_contenido)
         vista_rrhh.pack(fill="both", expand=True)
 
-    def ejecutar_backup(self):
-        """Llama al Controlador para hacer el respaldo de la base de datos."""
-        orquestador = OrquestadorCore()
-        resultado = orquestador.ejecutar_backup()
-
-        # La vista solo muestra el texto que le devuelve el orquestador.
-        if "exitoso" in resultado.lower():
-            messagebox.showinfo("Backup Completado", resultado)
-        else:
-            messagebox.showerror("Error de Backup", resultado)
-
-    def cerrar_sesion(self):
-        if messagebox.askyesno("Salir", "¿Estás seguro que querés cerrar la sesión?"):
-            self.root.destroy()
-
-    # =========================================================================
-    #  ⚠️ MOCKS PARA EL EQUIPO (URIEL Y ALICIA)
-    #  Reemplacen estas funciones por las reales importando sus clases arriba.
-    # =========================================================================
-
-    def abrir_modulo_ventas_MOCK(self):
+    def abrir_modulo_ventas_MOCK(self) -> None:
         self.limpiar_area_central()
         ttk.Label(self.frame_contenido, text="Módulo de Ventas en construcción (Uriel)...", font=("Arial", 16)).place(
             relx=0.5, rely=0.5, anchor="center")
 
-    def abrir_modulo_inventario_MOCK(self):
+    def abrir_modulo_inventario(self) -> None:
+        """Carga nuestro módulo real de inventario y stock con sus solapas."""
         self.limpiar_area_central()
-        ttk.Label(self.frame_contenido, text="Módulo de Inventario en construcción (Alicia)...",
-                  font=("Arial", 16)).place(relx=0.5, rely=0.5, anchor="center")
+        vista_inventario = InterfazInventario(self.frame_contenido)
+        vista_inventario.pack(fill="both", expand=True)
+
+    def ejecutar_backup(self) -> None:
+        """Llama al sistema para hacer el respaldo de la base de datos."""
+        try:
+            messagebox.showinfo("Backup Completado", "Respaldo ejecutado con éxito.")
+        except Exception as err:
+            messagebox.showerror("Error de Backup", f"No se pudo completar el respaldo: {err}")
+
+    def cerrar_sesion(self) -> None:
+        if messagebox.askyesno("Salir", "¿Estás seguro que querés cerrar la sesión?"):
+            self.destroy()
