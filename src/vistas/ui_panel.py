@@ -1,15 +1,19 @@
 import tkinter as tk
 from tkinter import ttk
 
-# Importamos tu vista de facturación
-from vistas.ui_facturacion import PantallaFacturacion
+# Importamos la interfaz gráfica real del módulo de ventas
+# Si en tu archivoui_facturacion.py la clase se llama InterfazFacturacion o PantallaFacturacion, ajústalo aquí.
+try:
+    from vistas.ui_facturacion import InterfazFacturacion as PantallaFacturacion
+except ImportError:
+    from vistas.ui_facturacion import PantallaFacturacion
 
 
 class PanelPrincipal(tk.Tk):
 
     def __init__(self):
         super().__init__()
-        self.title("Sistema de Gestión")
+        self.title("Sistema de Gestión Frankie")
         self.geometry("1000x650")
 
         # 1. Menú lateral (Izquierda)
@@ -47,7 +51,7 @@ class PanelPrincipal(tk.Tk):
         # BOTÓN FACTURACIÓN
         btn_facturacion = tk.Button(
             self.frame_menu,
-            text="Facturación",
+            text="Facturación / Ventas",
             bg="#27ae60",
             fg="white",
             font=("Arial", 10, "bold"),
