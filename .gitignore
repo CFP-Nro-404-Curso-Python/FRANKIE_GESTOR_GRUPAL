@@ -216,3 +216,12 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# PyCharm
+.idea/
+
+# Visual Studio Code
+.vscode/
+
+# Ignorar bases de datos binarias locales para no pisar datos en Git
+*.db
