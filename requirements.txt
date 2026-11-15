@@ -1,0 +1,10 @@
+# ============================================================================
+#  MANIFIESTO DE DEPENDENCIAS (requirements.txt)
+# ============================================================================
+#  Propósito: Asegurar la reproducibilidad estricta del entorno de ejecución.
+#  Este archivo declara las librerías externas y herramientas que el proyecto
+#  necesita para funcionar. Centralizar esto garantiza que cualquier persona
+#  que clone el repositorio pueda levantar exactamente el mismo entorno.
+# ============================================================================
+
+pytest==9.1.1
