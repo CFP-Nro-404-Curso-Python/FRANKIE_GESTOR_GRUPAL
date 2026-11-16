@@ -1,223 +1,214 @@
 """
 ===============================================================================
-MÓDULO DE INFRAESTRUCTURA: REPOSITORIO DE RRHH (src/infraestructura/repo_rrhh.py)
-===============================================================================
-Gestiona la persistencia de datos en 'personas' y 'empleados'.
+MÓDULO DE INFRAESTRUCTURA: REPOSITORIO DE RECURSOS HUMANOS (src/infraestructura/repo_rrhh.py)
 ===============================================================================
 """
 
-from typing import List, Optional
+from typing import List
 from infraestructura.conexion import ConexionDB
-from dominio.entidades_rrhh import Empleado, limpiar_documento, TIPOS_VINCULO, SECTORES, CARGOS
+from dominio.entidades_rrhh import Empleado
 
 
 class RepositorioRRHH:
-    """ Capa de acceso a datos para la gestión del personal y registros de personas. """
+    """
+    Capa de acceso a datos para la gestión del personal y registros de personas.
+    """
 
     @staticmethod
-    def asegurar_columnas() -> None:
-        try:
-            with ConexionDB() as conn:
-                cursor = conn.cursor()
-                cursor.execute("PRAGMA table_info(empleados)")
-                columnas = [col[1] for col in cursor.fetchall()]
-                if "activo" not in columnas:
-                    cursor.execute("ALTER TABLE empleados ADD COLUMN activo INTEGER DEFAULT 1")
-                if "tipo_vinculo" not in columnas:
-                    cursor.execute("ALTER TABLE empleados ADD COLUMN tipo_vinculo TEXT DEFAULT 'Planta'")
-                conn.commit()
-        except Exception as e:
-            print(f"Error al verificar/actualizar columnas en empleados: {e}")
-
-    @staticmethod
-    def existe_documento(nro_documento: str, id_persona_actual: Optional[int] = None) -> bool:
-        doc_limpio = limpiar_documento(nro_documento)
-        try:
-            with ConexionDB() as conn:
-                cursor = conn.cursor()
-                if id_persona_actual:
-                    cursor.execute("""
-                        SELECT 1 FROM personas
-                        WHERE REPLACE(REPLACE(nro_documento, '-', ''), ' ', '') = ?
-                          AND id <> ?
-                    """, (doc_limpio, id_persona_actual))
-                else:
-                    cursor.execute("""
-                        SELECT 1 FROM personas
-                        WHERE REPLACE(REPLACE(nro_documento, '-', ''), ' ', '') = ?
-                    """, (doc_limpio,))
-                return cursor.fetchone() is not None
-        except Exception as e:
-            print(f"Error al verificar duplicado de documento: {e}")
-            return False
+    def _obtener_columnas_tabla(cursor, tabla: str) -> List[str]:
+        cursor.execute(f"PRAGMA table_info({tabla});")
+        return [col[1] for col in cursor.fetchall()]
 
     @staticmethod
     def generar_siguiente_legajo() -> str:
-        try:
-            with ConexionDB() as conn:
-                cursor = conn.cursor()
-                cursor.execute("SELECT MAX(id) FROM empleados")
-                row = cursor.fetchone()
-                ultimo_id = row[0] if (row and row[0] is not None) else 0
-                return f"EMP-{(ultimo_id + 1):03d}"
-        except Exception as e:
-            print(f"Error al calcular legajo: {e}")
-            return "EMP-001"
+        with ConexionDB() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT legajo FROM empleados ORDER BY id DESC LIMIT 1;")
+            row = cursor.fetchone()
+            if row and row["legajo"]:
+                digitos = "".join(c for c in str(row["legajo"]) if c.isdigit())
+                if digitos:
+                    return f"E{int(digitos) + 1:03d}"
+            return "E001"
 
     @staticmethod
-    def crear_empleado(empleado: Empleado) -> bool:
-        """Inserta un nuevo empleado en una transacción atómica."""
-        RepositorioRRHH.asegurar_columnas()
-        try:
-            with ConexionDB() as conn:
-                cursor = conn.cursor()
+    def crear_empleado(emp: Empleado) -> bool:
+        with ConexionDB() as conn:
+            cursor = conn.cursor()
+            try:
+                doc_limpio = "".join(c for c in str(emp.nro_documento) if c.isdigit())
+                tipo_doc = "CUIL" if len(doc_limpio) == 11 else "DNI"
 
-                sql_persona = """
-                    INSERT INTO personas (tipo_persona, nombres, apellidos, razon_social, tipo_documento, nro_documento, telefono, email, domicilio, ciudad, provincia, codigo_postal)
-                    VALUES ('Fisica', ?, ?, NULL, 'DNI', ?, ?, ?, '', '', '', '')
-                """
-                cursor.execute(sql_persona, (
-                    empleado.nombres or "Sin Nombre",
-                    empleado.apellidos or "Sin Apellido",
-                    empleado.nro_documento or "",
-                    empleado.telefono or "",
-                    empleado.email or ""
-                ))
+                # 1. Insertar en 'personas' cumpliendo los CHECK del esquema oficial
+                cursor.execute(
+                    """
+                    INSERT INTO personas (
+                        tipo_persona, nombres, apellidos, razon_social,
+                        tipo_documento, nro_documento, telefono, email
+                    ) VALUES ('Fisica', ?, ?, NULL, ?, ?, ?, ?);
+                    """,
+                    (
+                        emp.nombres.strip(),
+                        emp.apellidos.strip(),
+                        tipo_doc,
+                        doc_limpio,
+                        (emp.telefono or "").strip(),
+                        (emp.email or "").strip(),
+                    ),
+                )
+                id_persona_nueva = cursor.lastrowid
 
-                id_persona_generado = cursor.lastrowid
+                # 2. Detectar columnas reales de 'empleados' en la BD actual
+                cols_emp = RepositorioRRHH._obtener_columnas_tabla(cursor, "empleados")
 
-                cargo_val = empleado.cargo if empleado.cargo in CARGOS else "empleado_ventas"
-                sector_val = empleado.sector if empleado.sector in SECTORES else "Ventas"
-                vinculo_val = empleado.tipo_vinculo if empleado.tipo_vinculo in TIPOS_VINCULO else "Planta"
+                campos = ["id_persona", "id_usuario", "legajo", "cargo", "sector", "sueldo"]
+                valores = [
+                    id_persona_nueva,
+                    None,
+                    emp.legajo or RepositorioRRHH.generar_siguiente_legajo(),
+                    emp.cargo,
+                    emp.sector,
+                    float(emp.sueldo or 0.0),
+                ]
 
-                sql_empleado = """
-                    INSERT INTO empleados (id_persona, id_usuario, legajo, cargo, sector, tipo_vinculo, sueldo, activo)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, 1)
-                """
-                cursor.execute(sql_empleado, (
-                    id_persona_generado,
-                    empleado.id_usuario,
-                    empleado.legajo or RepositorioRRHH.generar_siguiente_legajo(),
-                    cargo_val,
-                    sector_val,
-                    vinculo_val,
-                    empleado.sueldo or 0.0
-                ))
+                if "tipo_vinculo" in cols_emp:
+                    campos.append("tipo_vinculo")
+                    valores.append(getattr(emp, "tipo_vinculo", "Planta") or "Planta")
 
-                conn.commit()
+                if "activo" in cols_emp:
+                    campos.append("activo")
+                    valores.append(1)
+
+                placeholders = ", ".join(["?"] * len(campos))
+                sql_emp = f"INSERT INTO empleados ({', '.join(campos)}) VALUES ({placeholders});"
+                cursor.execute(sql_emp, valores)
+
                 return True
-        except Exception as e:
-            print(f"[Error RepoRRHH]: Falló la creación del empleado -> {e}")
-            return False
+
+            except Exception as e:
+                print(f"[ERROR RepoRRHH.crear_empleado]: {e}")
+                raise e
 
     @staticmethod
-    def actualizar_empleado(empleado: Empleado) -> bool:
-        """Actualiza la información de un empleado existente."""
-        RepositorioRRHH.asegurar_columnas()
-        try:
-            with ConexionDB() as conn:
-                cursor = conn.cursor()
+    def actualizar_empleado(emp: Empleado) -> bool:
+        with ConexionDB() as conn:
+            cursor = conn.cursor()
+            try:
+                doc_limpio = "".join(c for c in str(emp.nro_documento) if c.isdigit())
+                tipo_doc = "CUIL" if len(doc_limpio) == 11 else "DNI"
 
-                cursor.execute("""
-                    UPDATE personas
-                    SET nombres = ?, apellidos = ?, nro_documento = ?, telefono = ?, email = ?
-                    WHERE id = ?
-                """, (
-                    empleado.nombres or "",
-                    empleado.apellidos or "",
-                    empleado.nro_documento or "",
-                    empleado.telefono or "",
-                    empleado.email or "",
-                    empleado.id
-                ))
+                if emp.id_persona:
+                    cursor.execute(
+                        """
+                        UPDATE personas
+                        SET nombres = ?, apellidos = ?, tipo_documento = ?,
+                            nro_documento = ?, telefono = ?, email = ?
+                        WHERE id = ?;
+                        """,
+                        (
+                            emp.nombres.strip(),
+                            emp.apellidos.strip(),
+                            tipo_doc,
+                            doc_limpio,
+                            (emp.telefono or "").strip(),
+                            (emp.email or "").strip(),
+                            emp.id_persona,
+                        ),
+                    )
 
-                cargo_val = empleado.cargo if empleado.cargo in CARGOS else "empleado_ventas"
-                sector_val = empleado.sector if empleado.sector in SECTORES else "Ventas"
-                vinculo_val = empleado.tipo_vinculo if empleado.tipo_vinculo in TIPOS_VINCULO else "Planta"
+                cols_emp = RepositorioRRHH._obtener_columnas_tabla(cursor, "empleados")
+                sets = ["legajo = ?", "cargo = ?", "sector = ?", "sueldo = ?"]
+                valores = [emp.legajo, emp.cargo, emp.sector, float(emp.sueldo or 0.0)]
 
-                cursor.execute("""
-                    UPDATE empleados
-                    SET legajo = ?, cargo = ?, sector = ?, tipo_vinculo = ?, sueldo = ?
-                    WHERE id = ?
-                """, (
-                    empleado.legajo or "",
-                    cargo_val,
-                    sector_val,
-                    vinculo_val,
-                    empleado.sueldo or 0.0,
-                    empleado.id_empleado
-                ))
+                if "tipo_vinculo" in cols_emp:
+                    sets.append("tipo_vinculo = ?")
+                    valores.append(getattr(emp, "tipo_vinculo", "Planta") or "Planta")
 
-                conn.commit()
+                valores.append(emp.id_empleado)
+                cursor.execute(f"UPDATE empleados SET {', '.join(sets)} WHERE id = ?;", valores)
+
                 return True
-        except Exception as e:
-            print(f"[Error RepoRRHH]: Falló la actualización del empleado -> {e}")
-            return False
+
+            except Exception as e:
+                print(f"[ERROR RepoRRHH.actualizar_empleado]: {e}")
+                raise e
 
     @staticmethod
-    def cambiar_estado_empleado(id_empleado: int, nuevo_estado: int) -> bool:
-        """Realiza la baja lógica o activación de un empleado."""
-        RepositorioRRHH.asegurar_columnas()
-        try:
-            with ConexionDB() as conn:
-                cursor = conn.cursor()
-                cursor.execute("UPDATE empleados SET activo = ? WHERE id = ?", (nuevo_estado, id_empleado))
-                conn.commit()
-                return True
-        except Exception as e:
-            print(f"[Error RepoRRHH]: Falló el cambio de estado -> {e}")
-            return False
+    def guardar_empleado(emp: Empleado) -> bool:
+        """Método unificado para alta o modificación."""
+        if getattr(emp, "id_empleado", None):
+            return RepositorioRRHH.actualizar_empleado(emp)
+        return RepositorioRRHH.crear_empleado(emp)
+
+    @staticmethod
+    def cambiar_estado_empleado(id_empleado: int, nuevo_estado: bool) -> bool:
+        """
+        Realiza la baja o alta lógica (Soft Delete) actualizando la columna 'activo' (1 o 0).
+        Si la columna no existiera en una BD heredada, la agrega automáticamente.
+        """
+        with ConexionDB() as conn:
+            cursor = conn.cursor()
+            cols_emp = RepositorioRRHH._obtener_columnas_tabla(cursor, "empleados")
+            if "activo" not in cols_emp:
+                cursor.execute("ALTER TABLE empleados ADD COLUMN activo INTEGER DEFAULT 1;")
+
+            valor_estado = 1 if nuevo_estado else 0
+            cursor.execute(
+                "UPDATE empleados SET activo = ? WHERE id = ?;",
+                (valor_estado, id_empleado),
+            )
+            return cursor.rowcount > 0
 
     @staticmethod
     def listar_empleados(criterio_busqueda: str = "", incluir_inactivos: bool = False) -> List[Empleado]:
-        RepositorioRRHH.asegurar_columnas()
-        sql = """
-            SELECT e.id, p.id, p.nro_documento, p.nombres, p.apellidos,
-                   e.legajo, e.cargo, e.sector, e.tipo_vinculo, e.sueldo,
-                   p.email, p.telefono, COALESCE(e.activo, 1) as activo, e.id_usuario
-            FROM empleados e
-            INNER JOIN personas p ON e.id_persona = p.id
-            WHERE 1 = 1
-        """
-        parametros = []
-        if not incluir_inactivos:
-            sql += " AND COALESCE(e.activo, 1) = 1"
+        with ConexionDB() as conn:
+            cursor = conn.cursor()
+            cols_emp = RepositorioRRHH._obtener_columnas_tabla(cursor, "empleados")
 
-        if criterio_busqueda:
-            sql += """
-                AND (p.nombres LIKE ? OR p.apellidos LIKE ? OR e.legajo LIKE ? OR p.nro_documento LIKE ? OR p.email LIKE ?)
+            col_vinculo = "e.tipo_vinculo" if "tipo_vinculo" in cols_emp else "'Planta' AS tipo_vinculo"
+            col_activo = "COALESCE(e.activo, 1) AS activo" if "activo" in cols_emp else "1 AS activo"
+
+            query = f"""
+                SELECT e.id AS id_empleado, e.id_persona, e.legajo, e.cargo,
+                       e.sector, {col_vinculo}, e.sueldo, {col_activo},
+                       p.nro_documento, p.nombres, p.apellidos, p.email, p.telefono
+                FROM empleados e
+                JOIN personas p ON e.id_persona = p.id
+                WHERE 1 = 1
             """
-            patron = f"%{criterio_busqueda}%"
-            parametros.extend([patron, patron, patron, patron, patron])
+            parametros = []
 
-        sql += " ORDER BY e.id ASC"
+            if not incluir_inactivos and "activo" in cols_emp:
+                query += " AND COALESCE(e.activo, 1) = 1"
 
-        empleados = []
-        try:
-            with ConexionDB() as conn:
-                cursor = conn.cursor()
-                cursor.execute(sql, parametros)
-                filas = cursor.fetchall()
+            if criterio_busqueda:
+                query += """
+                    AND (p.nombres LIKE ? OR p.apellidos LIKE ? OR e.legajo LIKE ? OR p.nro_documento LIKE ?)
+                """
+                patron = f"%{criterio_busqueda}%"
+                parametros.extend([patron, patron, patron, patron])
 
-                for f in filas:
-                    emp = Empleado(
-                        id_empleado=f[0],
-                        id_persona=f[1],
-                        nro_documento=f[2],
-                        nombres=f[3],
-                        apellidos=f[4],
-                        legajo=f[5],
-                        cargo=f[6],
-                        sector=f[7],
-                        tipo_vinculo=f[8],
-                        sueldo=f[9],
-                        email=f[10],
-                        telefono=f[11],
-                        id_usuario=f[13]
-                    )
-                    emp.activo = bool(f[12])
-                    empleados.append(emp)
-        except Exception as e:
-            print(f"[Error RepoRRHH]: Falló la consulta de empleados -> {e}")
+            query += " ORDER BY e.id ASC;"
+            cursor.execute(query, parametros)
+            filas = cursor.fetchall()
 
-        return empleados
+            lista: List[Empleado] = []
+            for f in filas:
+                emp = Empleado(
+                    id_empleado=f["id_empleado"],
+                    id_persona=f["id_persona"],
+                    nro_documento=f["nro_documento"],
+                    nombres=f["nombres"],
+                    apellidos=f["apellidos"],
+                    legajo=f["legajo"],
+                    cargo=f["cargo"],
+                    sector=f["sector"],
+                    tipo_vinculo=f["tipo_vinculo"],
+                    sueldo=f["sueldo"],
+                    email=f["email"],
+                    telefono=f["telefono"],
+                    activo=bool(f["activo"]),
+                )
+                lista.append(emp)
+
+            return lista

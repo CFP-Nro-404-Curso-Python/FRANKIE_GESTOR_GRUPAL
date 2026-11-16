@@ -1,408 +1,361 @@
 """
 ===============================================================================
-MÓDULO DE INTERFAZ DE USUARIO: CAPA DE PRESENTACIÓN DE EMPLEADOS (vistas/ui_empleados.py)
+MÓDULO DE VISTAS: INTERFAZ DE EMPLEADOS (src/vistas/ui_empleados.py)
 ===============================================================================
-Permite administrar legajos, datos fiscales, cargos, contratos y visualizar
-separadamente los apellidos y nombres del personal.
+Gestión completa del padrón de personal: Alta, Listado, Edición y Baja Lógica.
 ===============================================================================
 """
 
-import sys
-from pathlib import Path
 import tkinter as tk
 from tkinter import ttk, messagebox
-from typing import List, Optional
 
-# Garantizar que el directorio actual esté en sys.path
-DIR_ACTUAL = Path(__file__).resolve().parent
-RAIZ_PROYECTO = DIR_ACTUAL.parent.parent
-
-for path in (DIR_ACTUAL, RAIZ_PROYECTO):
-    if str(path) not in sys.path:
-        sys.path.insert(0, str(path))
-
-from dominio.entidades_rrhh import (
-    Empleado,
-    limpiar_documento,
-    CARGOS,
-    SECTORES,
-    TIPOS_VINCULO
-)
 from infraestructura.repo_rrhh import RepositorioRRHH
-from vistas.ui_estilos import COLOR_TEXTO_MUTED
-
-
-def formatear_cuit(cuit_limpio: str) -> str:
-    """ Convierte una cadena de 11 dígitos al formato de presentación XX-XXXXXXXX-X. """
-    cuit_digits = "".join(filter(str.isdigit, cuit_limpio or ""))
-    if len(cuit_digits) == 11:
-        return f"{cuit_digits[:2]}-{cuit_digits[2:10]}-{cuit_digits[10]}"
-    return cuit_limpio
+from dominio.entidades_rrhh import Empleado
 
 
 class InterfazEmpleados(ttk.Frame):
-    """ Componente principal de Interfaz Gráfica para el Módulo de Recursos Humanos. """
+    """
+    Panel de control y gestión del padrón de empleados (Módulo de RRHH).
+    """
 
-    def __init__(self, parent, *args, **kwargs):
-        super().__init__(parent, *args, **kwargs)
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.pack(fill="both", expand=True, padx=10, pady=10)
 
-        self.empleado_edicion_id: Optional[int] = None
+        # Estado de selección y caché local para edición rápida
+        self.empleado_seleccionado_id = None
+        self.persona_seleccionada_id = None
+        self.empleado_estado_activo = True
+        self.empleados_cache = {}
 
-        self.columnconfigure(0, weight=1)
-        self.rowconfigure(1, weight=0)
-        self.rowconfigure(2, weight=1)
+        # Variables de control del formulario
+        self.var_legajo = tk.StringVar()
+        self.var_documento = tk.StringVar()
+        self.var_nombres = tk.StringVar()
+        self.var_apellidos = tk.StringVar()
+        self.var_cargo = tk.StringVar(value="Administrador")
+        self.var_sector = tk.StringVar(value="Administración")
+        self.var_vinculo = tk.StringVar(value="Planta")
+        self.var_sueldo = tk.StringVar()
+        self.var_email = tk.StringVar()
+        self.var_telefono = tk.StringVar()
 
-        self._crear_encabezado()
-        self._crear_panel_formulario()
-        self._crear_panel_tabla()
-        self._cargar_tabla()
-        self._actualizar_legajo_sugerido()
+        self.var_busqueda = tk.StringVar()
+        self.var_mostrar_inactivos = tk.BooleanVar(value=False)
 
-    def _crear_encabezado(self):
-        frame_top = ttk.Frame(self)
-        frame_top.grid(row=0, column=0, padx=20, pady=(15, 5), sticky="ew")
+        self._construir_interfaz()
+        self.sugerir_legajo()
+        self.cargar_tabla_empleados()
 
-        lbl_titulo = ttk.Label(
-            frame_top,
-            text="Gestión de Recursos Humanos",
-            style="Subtitulo.TLabel"
+    def _construir_interfaz(self):
+        # 1. Formulario de Datos
+        frame_form = ttk.LabelFrame(self, text=" Datos del Empleado ", padding=15)
+        frame_form.pack(fill="x", padx=5, pady=5)
+
+        # Fila 0: Legajo y Documento
+        ttk.Label(frame_form, text="Legajo:").grid(row=0, column=0, sticky="w", padx=5, pady=5)
+        entry_legajo = ttk.Entry(frame_form, textvariable=self.var_legajo, width=15, state="readonly")
+        entry_legajo.grid(row=0, column=1, sticky="w", padx=5, pady=5)
+
+        ttk.Label(frame_form, text="CUIL / CUIT *:").grid(row=0, column=2, sticky="w", padx=5, pady=5)
+        ttk.Entry(frame_form, textvariable=self.var_documento, width=20).grid(row=0, column=3, sticky="w", padx=5,
+                                                                              pady=5)
+
+        # Fila 1: Nombres y Apellidos
+        ttk.Label(frame_form, text="Nombres *:").grid(row=1, column=0, sticky="w", padx=5, pady=5)
+        ttk.Entry(frame_form, textvariable=self.var_nombres, width=25).grid(row=1, column=1, sticky="ew", padx=5,
+                                                                            pady=5)
+
+        ttk.Label(frame_form, text="Apellidos *:").grid(row=1, column=2, sticky="w", padx=5, pady=5)
+        ttk.Entry(frame_form, textvariable=self.var_apellidos, width=25).grid(row=1, column=3, sticky="ew", padx=5,
+                                                                              pady=5)
+
+        # Fila 2: Cargo y Sector
+        ttk.Label(frame_form, text="Cargo *:").grid(row=2, column=0, sticky="w", padx=5, pady=5)
+        self.combo_cargo = ttk.Combobox(
+            frame_form,
+            textvariable=self.var_cargo,
+            state="readonly",
+            values=["Gerente", "Administrador", "Empleado_Admin", "Empleado_Ventas", "Empleado_Compras"]
         )
-        lbl_titulo.pack(anchor="w")
+        self.combo_cargo.grid(row=2, column=1, sticky="ew", padx=5, pady=5)
 
-        lbl_subtitulo = ttk.Label(
-            frame_top,
-            text="Administración de legajos, datos fiscales, cargos y contratos",
-            foreground=COLOR_TEXTO_MUTED
+        ttk.Label(frame_form, text="Sector *:").grid(row=2, column=2, sticky="w", padx=5, pady=5)
+        self.combo_sector = ttk.Combobox(
+            frame_form,
+            textvariable=self.var_sector,
+            state="readonly",
+            values=["Gestión", "Staff", "Ventas", "Compras", "Administración"]
         )
-        lbl_subtitulo.pack(anchor="w")
+        self.combo_sector.grid(row=2, column=3, sticky="ew", padx=5, pady=5)
 
-    def _crear_panel_formulario(self):
-        self.frame_form = ttk.LabelFrame(self, text=" Datos del Empleado ")
-        self.frame_form.grid(row=1, column=0, padx=20, pady=10, sticky="ew")
-        self.frame_form.columnconfigure((1, 3), weight=1)
+        # Fila 3: Vínculo y Sueldo
+        ttk.Label(frame_form, text="Vínculo *:").grid(row=3, column=0, sticky="w", padx=5, pady=5)
+        self.combo_vinculo = ttk.Combobox(
+            frame_form,
+            textvariable=self.var_vinculo,
+            state="readonly",
+            values=["Propietario", "Contratado", "Pasante", "Planta"]
+        )
+        self.combo_vinculo.grid(row=3, column=1, sticky="ew", padx=5, pady=5)
 
-        # Row 0: Nombres y Apellidos
-        ttk.Label(self.frame_form, text="Nombres:").grid(row=0, column=0, padx=10, pady=4, sticky="w")
-        self.txt_nombres = ttk.Entry(self.frame_form)
-        self.txt_nombres.grid(row=0, column=1, padx=10, pady=4, sticky="ew")
+        ttk.Label(frame_form, text="Sueldo Base ($) *:").grid(row=3, column=2, sticky="w", padx=5, pady=5)
+        ttk.Entry(frame_form, textvariable=self.var_sueldo, width=20).grid(row=3, column=3, sticky="w", padx=5, pady=5)
 
-        ttk.Label(self.frame_form, text="Apellidos:").grid(row=0, column=2, padx=10, pady=4, sticky="w")
-        self.txt_apellidos = ttk.Entry(self.frame_form)
-        self.txt_apellidos.grid(row=0, column=3, padx=10, pady=4, sticky="ew")
+        # Fila 4: Contacto
+        ttk.Label(frame_form, text="Email *:").grid(row=4, column=0, sticky="w", padx=5, pady=5)
+        ttk.Entry(frame_form, textvariable=self.var_email, width=25).grid(row=4, column=1, sticky="ew", padx=5, pady=5)
 
-        # Row 1: CUIT/CUIL y Legajo
-        ttk.Label(self.frame_form, text="CUIT / CUIL (11 dígitos):").grid(row=1, column=0, padx=10, pady=4, sticky="w")
-        self.txt_documento = ttk.Entry(self.frame_form)
-        self.txt_documento.grid(row=1, column=1, padx=10, pady=4, sticky="ew")
+        ttk.Label(frame_form, text="Teléfono:").grid(row=4, column=2, sticky="w", padx=5, pady=5)
+        ttk.Entry(frame_form, textvariable=self.var_telefono, width=20).grid(row=4, column=3, sticky="w", padx=5,
+                                                                             pady=5)
 
-        ttk.Label(self.frame_form, text="Legajo:").grid(row=1, column=2, padx=10, pady=4, sticky="w")
-        self.txt_legajo = ttk.Entry(self.frame_form)
-        self.txt_legajo.grid(row=1, column=3, padx=10, pady=4, sticky="ew")
+        # Botonera del Formulario
+        frame_botones = ttk.Frame(frame_form)
+        frame_botones.grid(row=5, column=0, columnspan=4, sticky="e", pady=10)
 
-        # Row 2: Cargo y Sector
-        ttk.Label(self.frame_form, text="Cargo:").grid(row=2, column=0, padx=10, pady=4, sticky="w")
-        self.cmb_cargo = ttk.Combobox(self.frame_form, values=CARGOS, state="readonly")
-        default_cargo = "empleado_ventas" if "empleado_ventas" in CARGOS else CARGOS[0]
-        self.cmb_cargo.set(default_cargo)
-        self.cmb_cargo.grid(row=2, column=1, padx=10, pady=4, sticky="ew")
+        ttk.Button(frame_botones, text="Limpiar / Nuevo", command=self.limpiar_formulario).pack(side="left", padx=5)
 
-        ttk.Label(self.frame_form, text="Sector:").grid(row=2, column=2, padx=10, pady=4, sticky="w")
-        self.cmb_sector = ttk.Combobox(self.frame_form, values=SECTORES, state="readonly")
-        default_sector = "Ventas" if "Ventas" in SECTORES else SECTORES[0]
-        self.cmb_sector.set(default_sector)
-        self.cmb_sector.grid(row=2, column=3, padx=10, pady=4, sticky="ew")
-
-        # Row 3: Tipo de Vínculo y Sueldo Base
-        ttk.Label(self.frame_form, text="Vínculo Laboral:").grid(row=3, column=0, padx=10, pady=4, sticky="w")
-        self.cmb_vinculo = ttk.Combobox(self.frame_form, values=TIPOS_VINCULO, state="readonly")
-        self.cmb_vinculo.set("Planta")
-        self.cmb_vinculo.grid(row=3, column=1, padx=10, pady=4, sticky="ew")
-
-        ttk.Label(self.frame_form, text="Sueldo Base ($):").grid(row=3, column=2, padx=10, pady=4, sticky="w")
-        self.txt_sueldo = ttk.Entry(self.frame_form)
-        self.txt_sueldo.grid(row=3, column=3, padx=10, pady=4, sticky="ew")
-
-        # Row 4: Teléfono y Email
-        ttk.Label(self.frame_form, text="Teléfono:").grid(row=4, column=0, padx=10, pady=4, sticky="w")
-        self.txt_telefono = ttk.Entry(self.frame_form)
-        self.txt_telefono.grid(row=4, column=1, padx=10, pady=4, sticky="ew")
-
-        ttk.Label(self.frame_form, text="Email:").grid(row=4, column=2, padx=10, pady=4, sticky="w")
-        self.txt_email = ttk.Entry(self.frame_form)
-        self.txt_email.grid(row=4, column=3, padx=10, pady=4, sticky="ew")
-
-        # Row 5: Botonera
-        frame_botones = ttk.Frame(self.frame_form)
-        frame_botones.grid(row=5, column=0, columnspan=4, pady=10, sticky="w")
-
-        self.btn_guardar = ttk.Button(
+        self.btn_toggle_estado = ttk.Button(
             frame_botones,
-            text="Guardar datos",
-            command=self._guardar_empleado
+            text="Deshabilitar",
+            command=self.toggle_estado_empleado,
+            state="disabled"
         )
-        self.btn_guardar.pack(side="left", padx=(10, 5))
+        self.btn_toggle_estado.pack(side="left", padx=5)
 
-        self.btn_limpiar = ttk.Button(
-            frame_botones,
-            text="Limpiar Formulario",
-            command=self._limpiar_formulario
+        self.btn_guardar = ttk.Button(frame_botones, text="Guardar Empleado", command=self.guardar_empleado)
+        self.btn_guardar.pack(side="left", padx=5)
+
+        # 2. Sección de Listado (Tabla Treeview)
+        frame_tabla = ttk.LabelFrame(self,
+                                     text=" Padrón de Personal Registrado (Haga clic en una fila para editar o deshabilitar) ",
+                                     padding=15)
+        frame_tabla.pack(fill="both", expand=True, padx=5, pady=5)
+
+        # Filtro de Búsqueda
+        frame_busqueda = ttk.Frame(frame_tabla)
+        frame_busqueda.pack(fill="x", pady=(0, 8))
+
+        ttk.Label(frame_busqueda, text="Buscar empleado:").pack(side="left", padx=(0, 5))
+        entry_buscar = ttk.Entry(frame_busqueda, textvariable=self.var_busqueda)
+        entry_buscar.pack(side="left", fill="x", expand=True, padx=(0, 10))
+        entry_buscar.bind("<KeyRelease>", lambda _e: self.cargar_tabla_empleados())
+
+        chk_inactivos = ttk.Checkbutton(
+            frame_busqueda,
+            text="Mostrar inactivos",
+            variable=self.var_mostrar_inactivos,
+            command=self.cargar_tabla_empleados
         )
-        self.btn_limpiar.pack(side="left", padx=5)
+        chk_inactivos.pack(side="right")
 
-    def _crear_panel_tabla(self):
-        frame_tabla = ttk.LabelFrame(self, text=" Nómina de Personal ")
-        frame_tabla.grid(row=2, column=0, padx=20, pady=(0, 15), sticky="nsew")
-        frame_tabla.columnconfigure(0, weight=1)
-        frame_tabla.rowconfigure(1, weight=1)
-
-        frame_filtro = ttk.Frame(frame_tabla)
-        frame_filtro.grid(row=0, column=0, padx=10, pady=5, sticky="ew")
-
-        ttk.Label(frame_filtro, text="Buscar:").pack(side="left", padx=(0, 5))
-        self.txt_buscar = ttk.Entry(frame_filtro)
-        self.txt_buscar.pack(side="left", fill="x", expand=True, padx=5)
-        self.txt_buscar.bind("<KeyRelease>", self._al_buscar_tecla)
-
-        self.var_inactivos = tk.BooleanVar(value=False)
-        self.chk_inactivos = ttk.Checkbutton(
-            frame_filtro,
-            text="Mostrar Inactivos",
-            variable=self.var_inactivos,
-            command=self._cargar_tabla
-        )
-        self.chk_inactivos.pack(side="right", padx=10)
-
-        columnas = ("id", "legajo", "cuit", "apellidos", "nombres", "cargo", "sector", "vinculo", "sueldo", "estado")
-        self.tabla = ttk.Treeview(frame_tabla, columns=columnas, show="headings", height=6)
+        # Tabla Treeview
+        columnas = ("id", "legajo", "nombre", "documento", "cargo", "sector", "sueldo", "email", "telefono", "estado")
+        self.tabla = ttk.Treeview(frame_tabla, columns=columnas, show="headings", height=8)
 
         self.tabla.heading("id", text="ID")
         self.tabla.heading("legajo", text="Legajo")
-        self.tabla.heading("cuit", text="CUIT / CUIL")
-        self.tabla.heading("apellidos", text="Apellidos")
-        self.tabla.heading("nombres", text="Nombres")
+        self.tabla.heading("nombre", text="Nombre Completo")
+        self.tabla.heading("documento", text="CUIL / CUIT")
         self.tabla.heading("cargo", text="Cargo")
         self.tabla.heading("sector", text="Sector")
-        self.tabla.heading("vinculo", text="Vínculo")
         self.tabla.heading("sueldo", text="Sueldo Base")
+        self.tabla.heading("email", text="Email")
+        self.tabla.heading("telefono", text="Teléfono")
         self.tabla.heading("estado", text="Estado")
 
         self.tabla.column("id", width=30, anchor="center")
         self.tabla.column("legajo", width=70, anchor="center")
-        self.tabla.column("cuit", width=110, anchor="center")
-        self.tabla.column("apellidos", width=120, anchor="w")
-        self.tabla.column("nombres", width=120, anchor="w")
+        self.tabla.column("nombre", width=140, anchor="w")
+        self.tabla.column("documento", width=105, anchor="center")
         self.tabla.column("cargo", width=110, anchor="w")
-        self.tabla.column("sector", width=90, anchor="w")
-        self.tabla.column("vinculo", width=80, anchor="center")
+        self.tabla.column("sector", width=95, anchor="w")
         self.tabla.column("sueldo", width=85, anchor="e")
+        self.tabla.column("email", width=130, anchor="w")
+        self.tabla.column("telefono", width=90, anchor="center")
         self.tabla.column("estado", width=65, anchor="center")
 
-        scrollbar = ttk.Scrollbar(frame_tabla, orient="vertical", command=self.tabla.yview)
-        self.tabla.configure(yscrollcommand=scrollbar.set)
+        scroll_y = ttk.Scrollbar(frame_tabla, orient="vertical", command=self.tabla.yview)
+        scroll_x = ttk.Scrollbar(frame_tabla, orient="horizontal", command=self.tabla.xview)
+        self.tabla.configure(yscrollcommand=scroll_y.set, xscrollcommand=scroll_x.set)
 
-        self.tabla.grid(row=1, column=0, padx=(10, 0), pady=5, sticky="nsew")
-        scrollbar.grid(row=1, column=1, padx=(0, 10), pady=5, sticky="ns")
+        self.tabla.pack(side="top", fill="both", expand=True)
+        scroll_y.pack(side="right", fill="y")
+        scroll_x.pack(side="bottom", fill="x")
 
-        self.tabla.bind("<Double-1>", self._al_doble_click_tabla)
+        self.tabla.bind("<<TreeviewSelect>>", self._al_seleccionar_fila)
 
-        frame_acciones_tabla = ttk.Frame(frame_tabla)
-        frame_acciones_tabla.grid(row=2, column=0, columnspan=2, padx=10, pady=(0, 5), sticky="ew")
-
-        btn_editar = ttk.Button(
-            frame_acciones_tabla,
-            text="Editar Seleccionado",
-            command=self._cargar_seleccion_formulario
-        )
-        btn_editar.pack(side="left", padx=5)
-
-        btn_estado = ttk.Button(
-            frame_acciones_tabla,
-            text="Activar/Desactivar",
-            command=self._alternar_estado_empleado
-        )
-        btn_estado.pack(side="left", padx=5)
-
-    def _actualizar_legajo_sugerido(self):
-        self.txt_legajo.config(state="normal")
-        self.txt_legajo.delete(0, "end")
-        if self.empleado_edicion_id is None:
+    def sugerir_legajo(self):
+        """Asigna automáticamente el siguiente legajo disponible."""
+        try:
             siguiente = RepositorioRRHH.generar_siguiente_legajo()
-            self.txt_legajo.insert(0, siguiente)
-        self.txt_legajo.config(state="disabled")
+            self.var_legajo.set(siguiente)
+        except Exception:
+            self.var_legajo.set("E001")
 
-    def _al_buscar_tecla(self, _event):
-        self._cargar_tabla()
+    def cargar_tabla_empleados(self):
+        """Carga y filtra los registros en la tabla, guardando sus objetos en caché."""
+        for row in self.tabla.get_children():
+            self.tabla.delete(row)
 
-    def _cargar_tabla(self):
-        for item in self.tabla.get_children():
-            self.tabla.delete(item)
+        self.empleados_cache.clear()
+        criterio = self.var_busqueda.get().strip()
+        incluir_inactivos = self.var_mostrar_inactivos.get()
 
-        criterio = self.txt_buscar.get().strip() if hasattr(self, 'txt_buscar') else ""
-        incluir_inactivos = self.var_inactivos.get() if hasattr(self, 'var_inactivos') else False
+        try:
+            empleados = RepositorioRRHH.listar_empleados(criterio_busqueda=criterio,
+                                                         incluir_inactivos=incluir_inactivos)
+            for emp in empleados:
+                self.empleados_cache[str(emp.id_empleado)] = emp
+                estado_str = "Activo" if getattr(emp, "activo", True) else "Inactivo"
+                self.tabla.insert("", "end", values=(
+                    emp.id_empleado,
+                    emp.legajo,
+                    f"{emp.apellidos}, {emp.nombres}",
+                    emp.nro_documento,
+                    emp.cargo,
+                    emp.sector,
+                    f"$ {emp.sueldo:,.2f}" if emp.sueldo else "$ 0.00",
+                    emp.email or "-",
+                    emp.telefono or "-",
+                    estado_str
+                ))
+        except Exception as e:
+            print(f"[AVISO] No se pudo cargar la tabla de empleados: {e}")
 
-        empleados: List[Empleado] = RepositorioRRHH.listar_empleados(
-            criterio_busqueda=criterio,
-            incluir_inactivos=incluir_inactivos
-        )
+    def guardar_empleado(self):
+        """Valida y persiste el empleado (Alta o Modificación)."""
+        doc = "".join(c for c in self.var_documento.get() if c.isdigit())
+        nombres = self.var_nombres.get().strip()
+        apellidos = self.var_apellidos.get().strip()
+        cargo = self.var_cargo.get().strip()
+        sector = self.var_sector.get().strip()
+        vinculo = self.var_vinculo.get().strip()
+        sueldo_txt = self.var_sueldo.get().strip()
+        email = self.var_email.get().strip()
+        telefono = self.var_telefono.get().strip()
 
-        for emp in empleados:
-            estado_txt = "Activo" if emp.activo else "Inactivo"
-            cuit_formateado = formatear_cuit(emp.nro_documento)
-
-            self.tabla.insert("", "end", values=(
-                emp.id_empleado,
-                emp.legajo,
-                cuit_formateado,
-                emp.apellidos or "",
-                emp.nombres or "",
-                emp.cargo,
-                emp.sector,
-                emp.tipo_vinculo,
-                f"$ {emp.sueldo:,.2f}",
-                estado_txt
-            ))
-
-    def _limpiar_formulario(self):
-        self.empleado_edicion_id = None
-        self.txt_nombres.delete(0, "end")
-        self.txt_apellidos.delete(0, "end")
-        self.txt_documento.delete(0, "end")
-        self.txt_sueldo.delete(0, "end")
-        self.txt_telefono.delete(0, "end")
-        self.txt_email.delete(0, "end")
-
-        default_cargo = "empleado_ventas" if "empleado_ventas" in CARGOS else CARGOS[0]
-        default_sector = "Ventas" if "Ventas" in SECTORES else SECTORES[0]
-
-        self.cmb_cargo.set(default_cargo)
-        self.cmb_sector.set(default_sector)
-        self.cmb_vinculo.set("Planta")
-        self.btn_guardar.configure(text="Guardar datos")
-
-        self._actualizar_legajo_sugerido()
-
-    def _guardar_empleado(self):
-        nombres = self.txt_nombres.get().strip()
-        apellidos = self.txt_apellidos.get().strip()
-        cuit_raw = self.txt_documento.get().strip()
-        cuit_limpio = limpiar_documento(cuit_raw)
-
-        self.txt_legajo.config(state="normal")
-        legajo = self.txt_legajo.get().strip()
-        self.txt_legajo.config(state="disabled")
-
-        sueldo_str = self.txt_sueldo.get().strip()
-
-        if not nombres or not apellidos:
-            messagebox.showwarning("Atención", "Nombres y Apellidos son obligatorios.")
-            return
-
-        if not cuit_limpio or len(cuit_limpio) != 11 or not cuit_limpio.isdigit():
-            messagebox.showwarning("Atención", "Ingrese un CUIT/CUIL válido de 11 dígitos numéricos.")
-            return
-
-        id_persona_ref = None
-        if self.empleado_edicion_id:
-            for emp in RepositorioRRHH.listar_empleados(incluir_inactivos=True):
-                if getattr(emp, "id_empleado", None) == self.empleado_edicion_id:
-                    id_persona_ref = getattr(emp, "id", None)
-                    break
-
-        if RepositorioRRHH.existe_documento(cuit_limpio, id_persona_actual=id_persona_ref):
-            messagebox.showerror("Error", f"El CUIT/CUIL '{formatear_cuit(cuit_limpio)}' ya está registrado.")
+        if not all([doc, nombres, apellidos, cargo, sector, vinculo, sueldo_txt, email]):
+            messagebox.showwarning("Campos Incompletos",
+                                   "Por favor, complete todos los campos obligatorios marcados con (*).")
             return
 
         try:
-            sueldo = float(sueldo_str) if sueldo_str else 0.0
+            sueldo = float(sueldo_txt)
         except ValueError:
-            messagebox.showerror("Error", "El sueldo debe ser un valor numérico decimal válido.")
+            messagebox.showerror("Error de Formato", "El sueldo base debe ser un valor numérico.")
             return
 
-        emp = Empleado(
-            id_empleado=self.empleado_edicion_id,
-            id_persona=id_persona_ref,
-            nro_documento=cuit_limpio,
+        legajo = self.var_legajo.get().strip()
+
+        empleado = Empleado(
+            id_empleado=self.empleado_seleccionado_id,
+            id_persona=self.persona_seleccionada_id,
+            nro_documento=doc,
             nombres=nombres,
             apellidos=apellidos,
             legajo=legajo,
-            cargo=self.cmb_cargo.get(),
-            sector=self.cmb_sector.get(),
-            tipo_vinculo=self.cmb_vinculo.get(),
+            cargo=cargo,
+            sector=sector,
+            tipo_vinculo=vinculo,
             sueldo=sueldo,
-            telefono=self.txt_telefono.get().strip(),
-            email=self.txt_email.get().strip()
+            email=email,
+            telefono=telefono,
+            activo=self.empleado_estado_activo
         )
 
-        if self.empleado_edicion_id:
-            exito = RepositorioRRHH.actualizar_empleado(emp)
-            msg = "Empleado actualizado correctamente."
-        else:
-            exito = RepositorioRRHH.crear_empleado(emp)
-            msg = "Empleado registrado con éxito."
+        try:
+            es_edicion = self.empleado_seleccionado_id is not None
+            exito = RepositorioRRHH.guardar_empleado(empleado)
 
-        if exito:
-            messagebox.showinfo("Éxito", msg)
-            self._limpiar_formulario()
-            self._cargar_tabla()
-        else:
-            messagebox.showerror("Error", "Ocurrió un fallo en la operación de base de datos.")
-
-    def _cargar_seleccion_formulario(self):
-        seleccion = self.tabla.selection()
-        if not seleccion:
-            messagebox.showwarning("Atención", "Seleccione un empleado de la lista para editar.")
-            return
-
-        valores = self.tabla.item(seleccion[0], "values")
-        id_empleado = int(valores[0])
-
-        empleados = RepositorioRRHH.listar_empleados(incluir_inactivos=True)
-        emp_sel = next((e for e in empleados if e.id_empleado == id_empleado), None)
-
-        if emp_sel:
-            self._limpiar_formulario()
-            self.empleado_edicion_id = emp_sel.id_empleado
-            self.txt_nombres.insert(0, emp_sel.nombres or "")
-            self.txt_apellidos.insert(0, emp_sel.apellidos or "")
-            self.txt_documento.insert(0, emp_sel.nro_documento or "")
-
-            self.txt_legajo.config(state="normal")
-            self.txt_legajo.delete(0, "end")
-            self.txt_legajo.insert(0, emp_sel.legajo or "")
-            self.txt_legajo.config(state="disabled")
-
-            self.txt_sueldo.insert(0, str(emp_sel.sueldo or 0.0))
-            self.txt_telefono.insert(0, emp_sel.telefono or "")
-            self.txt_email.insert(0, emp_sel.email or "")
-
-            if emp_sel.cargo in CARGOS:
-                self.cmb_cargo.set(emp_sel.cargo)
-            if emp_sel.sector in SECTORES:
-                self.cmb_sector.set(emp_sel.sector)
-            if emp_sel.tipo_vinculo in TIPOS_VINCULO:
-                self.cmb_vinculo.set(emp_sel.tipo_vinculo)
-
-            self.btn_guardar.configure(text="Guardar datos")
-
-    def _al_doble_click_tabla(self, _event):
-        self._cargar_seleccion_formulario()
-
-    def _alternar_estado_empleado(self):
-        seleccion = self.tabla.selection()
-        if not seleccion:
-            messagebox.showwarning("Atención", "Seleccione un empleado para cambiar su estado.")
-            return
-
-        valores = self.tabla.item(seleccion[0], "values")
-        id_empleado = int(valores[0])
-        estado_actual = valores[9]
-
-        nuevo_estado = 0 if estado_actual == "Activo" else 1
-        accion_str = "desactivar" if nuevo_estado == 0 else "activar"
-
-        if messagebox.askyesno("Confirmar", f"¿Desea {accion_str} al empleado seleccionado?"):
-            if RepositorioRRHH.cambiar_estado_empleado(id_empleado, nuevo_estado):
-                messagebox.showinfo("Éxito", f"Empleado {accion_str}do correctamente.")
-                self._cargar_tabla()
+            if exito:
+                mensaje = "¡Datos del empleado actualizados correctamente!" if es_edicion else "¡Empleado registrado correctamente!"
+                messagebox.showinfo("Éxito", mensaje)
+                self.limpiar_formulario()
+                self.cargar_tabla_empleados()
             else:
-                messagebox.showerror("Error", "No se pudo cambiar el estado en la base de datos.")
+                messagebox.showerror("Error", "No se pudo guardar el registro del empleado.")
+        except Exception as e:
+            messagebox.showerror("Error Crítico", f"Ocurrió un error al persistir los datos: {e}")
+
+    def toggle_estado_empleado(self):
+        """Ejecuta la baja o reactivación lógica del empleado seleccionado."""
+        if not self.empleado_seleccionado_id:
+            return
+
+        nuevo_estado = not self.empleado_estado_activo
+        accion = "reactivar" if nuevo_estado else "deshabilitar"
+
+        confirmado = messagebox.askyesno(
+            "Confirmar Acción",
+            f"¿Está seguro de que desea {accion} al empleado con legajo {self.var_legajo.get()}?"
+        )
+        if not confirmado:
+            return
+
+        try:
+            exito = RepositorioRRHH.cambiar_estado_empleado(self.empleado_seleccionado_id, nuevo_estado)
+            if exito:
+                messagebox.showinfo("Estado Actualizado", f"El empleado ha sido {accion[:-1]}do correctamente.")
+                self.limpiar_formulario()
+                self.cargar_tabla_empleados()
+            else:
+                messagebox.showerror("Error", f"No se pudo {accion} al empleado.")
+        except Exception as e:
+            messagebox.showerror("Error Crítico", f"Error al cambiar el estado del empleado: {e}")
+
+    def limpiar_formulario(self):
+        """Restablece el formulario a su estado inicial para un nuevo ingreso."""
+        self.empleado_seleccionado_id = None
+        self.persona_seleccionada_id = None
+        self.empleado_estado_activo = True
+        self.var_documento.set("")
+        self.var_nombres.set("")
+        self.var_apellidos.set("")
+        self.var_sueldo.set("")
+        self.var_email.set("")
+        self.var_telefono.set("")
+        self.var_cargo.set("Administrador")
+        self.var_sector.set("Administración")
+        self.var_vinculo.set("Planta")
+        self.btn_guardar.config(text="Guardar Empleado")
+        self.btn_toggle_estado.config(text="Deshabilitar", state="disabled")
+        if self.tabla.selection():
+            self.tabla.selection_remove(self.tabla.selection())
+        self.sugerir_legajo()
+
+    def _al_seleccionar_fila(self, _event=None):
+        """Vuelca todos los datos del empleado seleccionado hacia el formulario y habilita su gestión."""
+        seleccion = self.tabla.selection()
+        if not seleccion:
+            return
+        valores = self.tabla.item(seleccion[0], "values")
+        if not valores:
+            return
+
+        id_emp_str = str(valores[0])
+        emp = self.empleados_cache.get(id_emp_str)
+        if not emp:
+            return
+
+        self.empleado_seleccionado_id = emp.id_empleado
+        self.persona_seleccionada_id = emp.id_persona
+        self.empleado_estado_activo = bool(getattr(emp, "activo", True))
+
+        self.var_legajo.set(emp.legajo or "")
+        self.var_documento.set(emp.nro_documento or "")
+        self.var_nombres.set(emp.nombres or "")
+        self.var_apellidos.set(emp.apellidos or "")
+        self.var_cargo.set(emp.cargo or "Administrador")
+        self.var_sector.set(emp.sector or "Administración")
+        self.var_vinculo.set(getattr(emp, "tipo_vinculo", "Planta") or "Planta")
+        self.var_sueldo.set(str(emp.sueldo if emp.sueldo is not None else ""))
+        self.var_email.set(emp.email or "")
+        self.var_telefono.set(emp.telefono or "")
+
+        self.btn_guardar.config(text="Actualizar Empleado")
+        self.btn_toggle_estado.config(
+            state="normal",
+            text="Deshabilitar" if self.empleado_estado_activo else "Reactivar"
+        )

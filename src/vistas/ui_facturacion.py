@@ -1,191 +1,256 @@
 """
 ===============================================================================
-MÓDULO DE INTERFAZ DE USUARIO: CAPA DE PRESENTACIÓN DE VENTAS (vistas/ui_facturacion.py)
+MÓDULO DE VISTAS: FACTURACIÓN Y VENTAS (src/vistas/ui_facturacion.py)
+===============================================================================
+Interfaz gráfica para la emisión de comprobantes de venta, selección de clientes,
+incorporación de ítems de stock al detalle y registro transaccional.
 ===============================================================================
 """
 
-import sys
-from pathlib import Path
 import tkinter as tk
 from tkinter import ttk, messagebox
-from typing import List, Dict
+from typing import List
 
-DIR_ACTUAL = Path(__file__).resolve().parent
-RAIZ_PROYECTO = DIR_ACTUAL.parent
-
-for path in (DIR_ACTUAL, RAIZ_PROYECTO):
-    if str(path) not in sys.path:
-        sys.path.insert(0, str(path))
-
-from controladores.orquestador_ventas import OrquestadorVentas
-from vistas.ui_estilos import COLOR_TEXTO_MUTED
+from dominio.entidades_ventas import Cliente, Factura, DetalleFactura
+from dominio.entidades_stock import Producto
+from infraestructura.repo_ventas import RepositorioVentas
+from infraestructura.repo_stock import RepositorioStock
 
 
 class InterfazFacturacion(ttk.Frame):
-    def __init__(self, parent, *args, **kwargs):
-        super().__init__(parent, *args, **kwargs)
+    """
+    Vista modular para la gestión comercial, selección de productos y facturación.
+    """
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.pack(fill="both", expand=True, padx=15, pady=15)
 
-        self.orquestador = OrquestadorVentas()
-        self.items_pantalla: List[Dict] = []
+        self.detalles_actuales: List[DetalleFactura] = []
+        self.productos_disponibles: List[Producto] = []
 
-        self.columnconfigure(0, weight=1)
-        self.rowconfigure(1, weight=0)
-        self.rowconfigure(2, weight=1)
+        self._crear_widgets()
+        self.cargar_datos_iniciales()
 
-        self._crear_encabezado()
-        self._crear_panel_formulario()
-        self._crear_panel_tabla()
+    def _crear_widgets(self):
+        # 1. Título de la Sección
+        lbl_titulo = ttk.Label(self, text="Módulo de Facturación y Ventas", style="Subtitulo.TLabel")
+        lbl_titulo.pack(anchor="w", pady=(0, 15))
 
-    def _crear_encabezado(self):
-        frame_top = ttk.Frame(self)
-        frame_top.grid(row=0, column=0, padx=20, pady=(15, 5), sticky="ew")
+        # Contenedor Principal dividido en dos columnas
+        contenedor = ttk.Frame(self)
+        contenedor.pack(fill="both", expand=True)
 
-        ttk.Label(frame_top, text="Módulo de Facturación y Ventas", style="Subtitulo.TLabel").pack(anchor="w")
-        ttk.Label(frame_top, text="Emisión de comprobantes y detalle de ventas", foreground=COLOR_TEXTO_MUTED).pack(anchor="w")
+        # -------------------------------------------------------------
+        # PANEL IZQUIERDO: Datos de Cabecera e Ítems
+        # -------------------------------------------------------------
+        frame_izq = ttk.Frame(contenedor)
+        frame_izq.pack(side="left", fill="both", padx=(0, 15), expand=False)
 
-    def _crear_panel_formulario(self):
-        self.frame_form = ttk.LabelFrame(self, text=" Datos de la Transacción ")
-        self.frame_form.grid(row=1, column=0, padx=20, pady=10, sticky="ew")
-        self.frame_form.columnconfigure((1, 3, 5, 7), weight=1)
+        # Datos del Cliente / Venta
+        frame_cabecera = ttk.LabelFrame(frame_izq, text=" Datos del Comprobante ", padding=12)
+        frame_cabecera.pack(fill="x", pady=(0, 10))
 
-        ttk.Label(self.frame_form, text="ID Cliente:").grid(row=0, column=0, padx=10, pady=4, sticky="w")
-        self.txt_id_cliente = ttk.Entry(self.frame_form)
-        self.txt_id_cliente.grid(row=0, column=1, padx=10, pady=4, sticky="ew")
+        ttk.Label(frame_cabecera, text="ID Cliente:").grid(row=0, column=0, sticky="w", pady=4)
+        self.entry_id_cliente = ttk.Entry(frame_cabecera, width=15)
+        self.entry_id_cliente.grid(row=0, column=1, sticky="w", pady=4, padx=(5, 10))
+        self.entry_id_cliente.insert(0, "1")
 
-        ttk.Label(self.frame_form, text="ID Vendedor:").grid(row=0, column=2, padx=10, pady=4, sticky="w")
-        self.txt_id_vendedor = ttk.Entry(self.frame_form)
-        self.txt_id_vendedor.grid(row=0, column=3, padx=10, pady=4, sticky="ew")
+        ttk.Label(frame_cabecera, text="ID Vendedor:").grid(row=1, column=0, sticky="w", pady=4)
+        self.entry_id_vendedor = ttk.Entry(frame_cabecera, width=15)
+        self.entry_id_vendedor.grid(row=1, column=1, sticky="w", pady=4, padx=(5, 10))
+        self.entry_id_vendedor.insert(0, "1")
 
-        self.var_iva = tk.BooleanVar(value=True)
-        ttk.Checkbutton(self.frame_form, text="Aplicar IVA (21%)", variable=self.var_iva, command=self._recalcular_vista).grid(row=0, column=4, columnspan=2, padx=10, pady=4, sticky="w")
+        # Agregar Ítems al Detalle
+        frame_item = ttk.LabelFrame(frame_izq, text=" Agregar Producto al Detalle ", padding=12)
+        frame_item.pack(fill="x", pady=(0, 10))
 
-        ttk.Label(self.frame_form, text="ID Producto:").grid(row=1, column=0, padx=10, pady=4, sticky="w")
-        self.txt_id_producto = ttk.Entry(self.frame_form)
-        self.txt_id_producto.grid(row=1, column=1, padx=10, pady=4, sticky="ew")
+        ttk.Label(frame_item, text="Producto:").grid(row=0, column=0, sticky="w", pady=4)
+        self.combo_productos = ttk.Combobox(frame_item, state="readonly", width=30)
+        self.combo_productos.grid(row=0, column=1, sticky="w", pady=4, padx=(5, 0))
+        self.combo_productos.bind("<<ComboboxSelected>>", self._al_seleccionar_producto)
 
-        ttk.Label(self.frame_form, text="Cantidad:").grid(row=1, column=2, padx=10, pady=4, sticky="w")
-        self.txt_cantidad = ttk.Entry(self.frame_form)
-        self.txt_cantidad.grid(row=1, column=3, padx=10, pady=4, sticky="ew")
+        ttk.Label(frame_item, text="Cantidad:").grid(row=1, column=0, sticky="w", pady=4)
+        self.entry_cantidad = ttk.Entry(frame_item, width=15)
+        self.entry_cantidad.grid(row=1, column=1, sticky="w", pady=4, padx=(5, 0))
+        self.entry_cantidad.insert(0, "1")
 
-        ttk.Label(self.frame_form, text="Precio U. ($):").grid(row=1, column=4, padx=10, pady=4, sticky="w")
-        self.txt_precio = ttk.Entry(self.frame_form)
-        self.txt_precio.grid(row=1, column=5, padx=10, pady=4, sticky="ew")
+        ttk.Label(frame_item, text="Desc. (%):").grid(row=2, column=0, sticky="w", pady=4)
+        self.entry_descuento = ttk.Entry(frame_item, width=15)
+        self.entry_descuento.grid(row=2, column=1, sticky="w", pady=4, padx=(5, 0))
+        self.entry_descuento.insert(0, "0.0")
 
-        ttk.Label(self.frame_form, text="% Desc:").grid(row=1, column=6, padx=10, pady=4, sticky="w")
-        self.txt_descuento = ttk.Entry(self.frame_form)
-        self.txt_descuento.grid(row=1, column=7, padx=10, pady=4, sticky="ew")
+        btn_agregar = ttk.Button(frame_item, text="Agregar Ítem", command=self.agregar_detalle)
+        btn_agregar.grid(row=3, column=0, columnspan=2, pady=(10, 0), sticky="ew")
 
-        frame_botones = ttk.Frame(self.frame_form)
-        frame_botones.grid(row=2, column=0, columnspan=8, pady=10, sticky="w")
+        # -------------------------------------------------------------
+        # PANEL DERECHO: Grilla de Detalles y Totales
+        # -------------------------------------------------------------
+        frame_der = ttk.Frame(contenedor)
+        frame_der.pack(side="right", fill="both", expand=True)
 
-        ttk.Button(frame_botones, text="Agregar Ítem", command=self._agregar_item).pack(side="left", padx=(10, 5))
-        ttk.Button(frame_botones, text="Limpiar Formulario", command=self._limpiar_todo).pack(side="left", padx=5)
+        frame_tabla = ttk.LabelFrame(frame_der, text=" Detalle de Factura ", padding=10)
+        frame_tabla.pack(fill="both", expand=True, pady=(0, 10))
 
-    def _crear_panel_tabla(self):
-        frame_tabla = ttk.LabelFrame(self, text=" Detalle de la Factura ")
-        frame_tabla.grid(row=2, column=0, padx=20, pady=(0, 15), sticky="nsew")
-        frame_tabla.columnconfigure(0, weight=1)
-        frame_tabla.rowconfigure(0, weight=1)
+        columnas = ("id_prod", "descripcion", "cantidad", "precio_unit", "descuento", "subtotal")
+        self.tree = ttk.Treeview(frame_tabla, columns=columnas, show="headings", selectmode="browse")
 
-        columnas = ("id_prod", "cant", "precio", "desc", "subtotal")
-        self.tabla = ttk.Treeview(frame_tabla, columns=columnas, show="headings", height=6)
+        self.tree.heading("id_prod", text="ID Prod")
+        self.tree.heading("descripcion", text="Descripción")
+        self.tree.heading("cantidad", text="Cant.")
+        self.tree.heading("precio_unit", text="Precio Unit.")
+        self.tree.heading("descuento", text="Desc. %")
+        self.tree.heading("subtotal", text="Subtotal")
 
-        self.tabla.heading("id_prod", text="ID Producto")
-        self.tabla.heading("cant", text="Cantidad")
-        self.tabla.heading("precio", text="Precio U.")
-        self.tabla.heading("desc", text="% Descuento")
-        self.tabla.heading("subtotal", text="Subtotal")
+        self.tree.column("id_prod", width=60, anchor="center")
+        self.tree.column("descripcion", width=180, anchor="w")
+        self.tree.column("cantidad", width=60, anchor="center")
+        self.tree.column("precio_unit", width=90, anchor="e")
+        self.tree.column("descuento", width=70, anchor="center")
+        self.tree.column("subtotal", width=100, anchor="e")
 
-        self.tabla.column("id_prod", width=100, anchor="center")
-        self.tabla.column("cant", width=80, anchor="center")
-        self.tabla.column("precio", width=110, anchor="e")
-        self.tabla.column("desc", width=90, anchor="center")
-        self.tabla.column("subtotal", width=120, anchor="e")
+        scrollbar = ttk.Scrollbar(frame_tabla, orient="vertical", command=self.tree.yview)
+        self.tree.configure(yscrollcommand=scrollbar.set)
 
-        scrollbar = ttk.Scrollbar(frame_tabla, orient="vertical", command=self.tabla.yview)
-        self.tabla.configure(yscrollcommand=scrollbar.set)
+        self.tree.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
 
-        self.tabla.grid(row=0, column=0, padx=(10, 0), pady=5, sticky="nsew")
-        scrollbar.grid(row=0, column=1, padx=(0, 10), pady=5, sticky="ns")
+        # Pie de Factura / Totales y Botón de Emisión
+        frame_pie = ttk.Frame(frame_der)
+        frame_pie.pack(fill="x", pady=5)
 
-        frame_pie = ttk.Frame(frame_tabla)
-        frame_pie.grid(row=1, column=0, columnspan=2, padx=10, pady=10, sticky="ew")
+        self.lbl_total = ttk.Label(frame_pie, text="TOTAL A PAGAR: $0.00", style="Subtitulo.TLabel")
+        self.lbl_total.pack(side="left", padx=5)
 
-        self.lbl_desglose = ttk.Label(frame_pie, text="Neto: $ 0.00 | IVA: $ 0.00 | TOTAL: $ 0.00", font=("Arial", 10, "bold"))
-        self.lbl_desglose.pack(side="left", padx=10)
+        btn_emitir = ttk.Button(frame_pie, text="Emitir Factura", command=self.emitir_factura)
+        btn_emitir.pack(side="right", padx=5)
 
-        ttk.Button(frame_pie, text="EMITIR FACTURA", command=self._emitir_factura).pack(side="right", padx=10)
+        btn_limpiar = ttk.Button(frame_pie, text="Limpiar", command=self.limpiar_factura)
+        btn_limpiar.pack(side="right", padx=5)
 
-    def _agregar_item(self):
+    def cargar_datos_iniciales(self):
+        """Carga el catálogo de productos disponibles para la venta desde el inventario."""
         try:
-            id_prod = int(self.txt_id_producto.get().strip())
-            cant = int(self.txt_cantidad.get().strip())
-            precio = float(self.txt_precio.get().strip())
-            desc = float(self.txt_descuento.get().strip() or 0.0)
+            self.productos_disponibles = RepositorioStock.listar_productos()
+            nombres_productos = [f"[{p.codigo}] {p.descripcion} (${p.precio_venta:,.2f})" for p in self.productos_disponibles]
+            self.combo_productos["values"] = nombres_productos
+            if nombres_productos:
+                self.combo_productos.current(0)
+        except Exception as e:
+            messagebox.showerror("Error", f"No se pudieron cargar los productos: {e}")
+
+    def _al_seleccionar_producto(self, _event):
+        """Acción al seleccionar un producto del desplegable."""
+        pass
+
+    def agregar_detalle(self):
+        """Agrega un renglón de detalle a la factura actual."""
+        seleccion_idx = self.combo_productos.current()
+        if seleccion_idx < 0 or seleccion_idx >= len(self.productos_disponibles):
+            messagebox.showwarning("Selección inválida", "Debe seleccionar un producto válido.")
+            return
+
+        prod = self.productos_disponibles[seleccion_idx]
+
+        try:
+            cantidad = int(self.entry_cantidad.get().strip())
+            if cantidad <= 0:
+                raise ValueError()
         except ValueError:
-            messagebox.showwarning("Atención", "Verifique que los valores ingresados sean numéricos.")
+            messagebox.showerror("Error de Formato", "La cantidad debe ser un número entero mayor a cero.")
             return
 
-        subtotal_item = self.orquestador.calcular_renglon(cant, precio, desc)
-        self.items_pantalla.append({
-            "id_producto": id_prod,
-            "cantidad": cant,
-            "precio_unitario": precio,
-            "descuento": desc,
-            "subtotal": subtotal_item
-        })
-
-        self.tabla.insert("", "end", values=(id_prod, cant, f"$ {precio:,.2f}", f"{desc:.1f}%", f"$ {subtotal_item:,.2f}"))
-        self._recalcular_vista()
-        self._limpiar_inputs_item()
-
-    def _recalcular_vista(self):
-        from dominio.entidades_ventas import DetalleFactura
-        detalles_tmp = [
-            DetalleFactura(it["id_producto"], it["cantidad"], it["precio_unitario"], it["descuento"], subtotal=it["subtotal"])
-            for it in self.items_pantalla
-        ]
-        subtotal_base, monto_iva, total = self.orquestador.calcular_totales_factura(detalles_tmp, aplicar_iva=self.var_iva.get())
-        self.lbl_desglose.configure(text=f"Neto: $ {subtotal_base:,.2f} | IVA: $ {monto_iva:,.2f} | TOTAL: $ {total:,.2f}")
-
-    def _limpiar_inputs_item(self):
-        self.txt_id_producto.delete(0, "end")
-        self.txt_cantidad.delete(0, "end")
-        self.txt_precio.delete(0, "end")
-        self.txt_descuento.delete(0, "end")
-        self.txt_id_producto.focus()
-
-    def _limpiar_todo(self):
-        self.txt_id_cliente.delete(0, "end")
-        self.txt_id_vendedor.delete(0, "end")
-        self._limpiar_inputs_item()
-        self.items_pantalla.clear()
-        for row in self.tabla.get_children():
-            self.tabla.delete(row)
-        self._recalcular_vista()
-
-    def _emitir_factura(self):
         try:
-            id_cli = int(self.txt_id_cliente.get().strip())
-            id_vend = int(self.txt_id_vendedor.get().strip())
+            descuento = float(self.entry_descuento.get().strip())
+            if not (0 <= descuento <= 100):
+                raise ValueError()
         except ValueError:
-            messagebox.showwarning("Atención", "ID Cliente e ID Vendedor deben ser enteros.")
+            messagebox.showerror("Error de Formato", "El porcentaje de descuento debe estar entre 0 y 100.")
             return
 
-        if not self.items_pantalla:
-            messagebox.showwarning("Atención", "Agregue al menos un ítem a la factura.")
-            return
+        precio_unit = float(prod.precio_venta)
+        subtotal = cantidad * precio_unit * (1.0 - descuento / 100.0)
 
-        try:
-            factura_emitida = self.orquestador.emitir_factura(
-                id_cliente=id_cli,
-                id_vendedor=id_vend,
-                items_raw=self.items_pantalla,
-                aplicar_iva=self.var_iva.get()
+        detalle = DetalleFactura(
+            id_producto=prod.id if prod.id is not None else 0,
+            cantidad=cantidad,
+            precio_unitario=precio_unit,
+            descuento_porcentaje=descuento,
+            subtotal=subtotal
+        )
+
+        self.detalles_actuales.append(detalle)
+        self.actualizar_tabla_detalles()
+
+    def actualizar_tabla_detalles(self):
+        """Refresca la grilla de ítems y calcula el total general."""
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+
+        total_general = 0.0
+
+        for det in self.detalles_actuales:
+            prod_desc = f"Producto ID {det.id_producto}"
+            for p in self.productos_disponibles:
+                if p.id == det.id_producto:
+                    prod_desc = p.descripcion
+                    break
+
+            self.tree.insert(
+                "",
+                "end",
+                values=(
+                    det.id_producto,
+                    prod_desc,
+                    det.cantidad,
+                    f"${det.precio_unitario:,.2f}",
+                    f"{det.descuento_porcentaje:.1f}%",
+                    f"${det.subtotal:,.2f}"
+                )
             )
-            messagebox.showinfo("Éxito", f"Factura #{factura_emitida.id_factura} emitida correctamente.\nTotal: $ {factura_emitida.total:,.2f}")
-            self._limpiar_todo()
-        except ValueError as err:
-            messagebox.showerror("Error de Validación", str(err))
-        except Exception as err:
-            messagebox.showerror("Error Inesperado", str(err))
+            total_general += det.subtotal
+
+        self.lbl_total.config(text=f"TOTAL A PAGAR: ${total_general:,.2f}")
+
+    def emitir_factura(self):
+        """Persiste la factura mediante el repositorio de ventas y procesa el descuento de stock."""
+        if not self.detalles_actuales:
+            messagebox.showwarning("Sin ítems", "La factura debe contener al menos un producto en el detalle.")
+            return
+
+        try:
+            id_cliente = int(self.entry_id_cliente.get().strip())
+            id_vendedor = int(self.entry_id_vendedor.get().strip())
+        except ValueError:
+            messagebox.showerror("Error", "El ID de cliente y vendedor deben ser numéricos.")
+            return
+
+        cliente_obj = RepositorioVentas.obtener_cliente_por_id(id_cliente)
+        if not cliente_obj:
+            cliente_obj = Cliente(nombres="Consumidor", apellidos="Final", id_cliente=id_cliente)
+
+        total_fac = sum(d.subtotal for d in self.detalles_actuales)
+
+        factura = Factura(
+            id_factura=None,
+            cliente=cliente_obj,
+            id_vendedor=id_vendedor,
+            total=total_fac,
+            detalles=self.detalles_actuales
+        )
+
+        try:
+            factura_guardada = RepositorioVentas.guardar_factura(factura)
+            messagebox.showinfo("Éxito", f"¡Factura #{factura_guardada.id_factura} emitida correctamente!\nTotal: ${factura_guardada.total:,.2f}")
+            self.limpiar_factura()
+            self.cargar_datos_iniciales()
+        except Exception as e:
+            messagebox.showerror("Error al Emitir", f"No se pudo guardar la factura: {e}")
+
+    def limpiar_factura(self):
+        """Reinicia el formulario de facturación."""
+        self.detalles_actuales = []
+        self.actualizar_tabla_detalles()
+        self.entry_cantidad.delete(0, tk.END)
+        self.entry_cantidad.insert(0, "1")
+        self.entry_descuento.delete(0, tk.END)
+        self.entry_descuento.insert(0, "0.0")

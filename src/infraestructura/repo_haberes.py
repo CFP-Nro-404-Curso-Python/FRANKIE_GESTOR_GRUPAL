@@ -1,6 +1,6 @@
 """
 ===============================================================================
-REPOSITORIO DE HABERES Y LIQUIDACIONES (infraestructura/repo_haberes.py)
+REPOSITORIO DE HABERES Y LIQUIDACIONES (src/infraestructura/repo_haberes.py)
 ===============================================================================
 Estrategia y Buenas Prácticas Aplicadas:
 1. Conexión Centralizada: Utiliza 'ConexionDB' mediante el gestor de contexto (with),
@@ -41,8 +41,8 @@ class RepositorioHaberes:
         Realiza el cálculo de conceptos remunerativos, deducciones de ley
         y persiste automáticamente el resultado en la tabla 'liquidaciones_haberes'.
         """
-        # Aseguramos que id_empleado sea un entero válido para evitar advertencias de tipado
-        id_emp_seguro = int(id_empleado) if id_empleado is not None else 0
+        # Conversión segura a entero para satisfacer el tipado estricto
+        id_emp_seguro: int = int(id_empleado) if id_empleado is not None else 0
 
         # 1. Haberes Remunerativos
         monto_antiguedad = basico * (0.01 * antiguedad_anios)
@@ -65,7 +65,7 @@ class RepositorioHaberes:
             monto_comision
         )
 
-        # 2. Haberes No Remunerativos (Asignaciones familiares / futuras APIs)
+        # 2. Haberes No Remunerativos
         total_no_remunerativo = 0.00
 
         # 3. Deducciones
@@ -120,12 +120,13 @@ class RepositorioHaberes:
         """
         Inserta una nueva liquidación o actualiza una existente usando el objeto de dominio.
         """
-        id_emp_seguro = int(liquidacion.id_empleado) if liquidacion.id_empleado is not None else 0
+        id_emp_seguro: int = int(liquidacion.id_empleado) if liquidacion.id_empleado is not None else 0
+        id_liq_seguro: int = int(liquidacion.id) if liquidacion.id is not None else 0
 
         with ConexionDB() as conexion:
             cursor = conexion.cursor()
 
-            if liquidacion.id_liquidacion is None:
+            if liquidacion.id is None:
                 cursor.execute(
                     """
                     INSERT INTO liquidaciones_haberes (
@@ -141,10 +142,10 @@ class RepositorioHaberes:
                         liquidacion.sueldo_basico,
                         liquidacion.total_remunerativo,
                         liquidacion.total_descuentos,
-                        liquidacion.sueldo_neto
+                        liquidacion.neto_a_cobrar
                     )
                 )
-                liquidacion.id_liquidacion = cursor.lastrowid
+                liquidacion.id = cursor.lastrowid
             else:
                 cursor.execute(
                     """
@@ -159,11 +160,11 @@ class RepositorioHaberes:
                         liquidacion.sueldo_basico,
                         liquidacion.total_remunerativo,
                         liquidacion.total_descuentos,
-                        liquidacion.sueldo_neto,
-                        liquidacion.id_liquidacion
+                        liquidacion.neto_a_cobrar,
+                        id_liq_seguro
                     )
                 )
-        return liquidacion.id_liquidacion if liquidacion.id_liquidacion is not None else 0
+        return int(liquidacion.id) if liquidacion.id is not None else 0
 
     def listar_liquidaciones(self) -> List[LiquidacionHaberes]:
         """
@@ -183,13 +184,13 @@ class RepositorioHaberes:
             liquidaciones = []
             for fila in filas:
                 liq = LiquidacionHaberes(
-                    id_liquidacion=fila["id_liquidacion"],
-                    id_empleado=fila["id_empleado"],
-                    periodo=fila["periodo"],
-                    sueldo_basico=fila["sueldo_basico"],
-                    total_remunerativo=fila["total_remunerativo"],
-                    total_descuentos=fila["total_descuentos"],
-                    sueldo_neto=fila["neto_a_cobrar"]
+                    id_empleado=int(fila["id_empleado"]),
+                    periodo=str(fila["periodo"]),
+                    sueldo_basico=float(fila["sueldo_basico"]),
+                    total_remunerativo=float(fila["total_remunerativo"]),
+                    total_descuentos=float(fila["total_descuentos"]),
+                    neto_a_cobrar=float(fila["neto_a_cobrar"]),
+                    id=int(fila["id_liquidacion"])
                 )
                 liquidaciones.append(liq)
 
