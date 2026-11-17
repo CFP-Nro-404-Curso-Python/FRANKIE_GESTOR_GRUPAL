@@ -1,95 +1,94 @@
+"""
+===============================================================================
+MÓDULO DE VISTAS: VENTANA DE LOGIN (src/vistas/ui_login.py)
+===============================================================================
+Gestiona la interfaz de autenticación, verifica las credenciales mediante
+el repositorio core y abre el Panel Principal corporativo al validar con éxito.
+===============================================================================
+"""
+
 import tkinter as tk
-# AGREGADO: Importamos ttk para usar los componentes estilizados.
-from tkinter import ttk, messagebox 
-from src.infraestructura.repo_core import RepoCore
-# AGREGADO: Importamos los estilos de Alicia.
-from vistas.ui_estilos import aplicar_estilos_base
+from tkinter import ttk, messagebox
+
+from infraestructura.repo_core import RepoCore
+from vistas.ui_panel import PanelPrincipal
+from vistas.estilos import COLOR_TEXTO_MUTED
 
 
 class VentanaLogin:
     """
-    Capa Visual (Vista) para el ingreso al sistema.
-    Solamente dibuja la pantalla y captura los clicks del usuario.
+    Formulario de inicio de sesión del Sistema Frankie.
     """
-    def __init__(self, root):
+    def __init__(self, root: tk.Tk):
         self.root = root
-        self.root.title("Frankie Gestor - Acceso")
-        self.root.geometry("300x250")
+        self.root.title("Frankie - Iniciar Sesión")
+        self.root.geometry("420x340")
         self.root.resizable(False, False)
 
-        # Contador de seguridad (regla de negocio simple que podemos manejar acá).
-        self.intentos_fallidos = 0
+        self.var_usuario = tk.StringVar()
+        self.var_password = tk.StringVar()
 
-        self._dibujar_interfaz()
+        self._crear_interfaz()
 
-    def _dibujar_interfaz(self):
-        # Etiquetas y Cajas de texto.
-        # MODIFICADO: Cambiamos tk.Label por ttk.Label y tk.Entry por ttk.Entry para heredar el CSS.
-        ttk.Label(self.root, text="Usuario:").pack(pady=(20, 5))
-        self.entry_usuario = ttk.Entry(self.root)
-        self.entry_usuario.pack()
+    def _crear_interfaz(self):
+        # Contenedor principal con padding accesible
+        frame = ttk.Frame(self.root, padding=25)
+        frame.pack(fill="both", expand=True)
 
-        ttk.Label(self.root, text="Contraseña:").pack(pady=(10, 5))
-        # show="*" oculta los caracteres tipeados por seguridad.
-        self.entry_password = ttk.Entry(self.root, show="*")
-        self.entry_password.pack()
+        # Título principal
+        lbl_titulo = ttk.Label(
+            frame,
+            text="SISTEMA FRANKIE",
+            style="Subtitulo.TLabel"
+        )
+        lbl_titulo.pack(pady=(10, 5))
 
-        # Botón de ingreso (El 'command' vincula el click con nuestra función).
-        # MODIFICADO: Cambiamos tk.Button por ttk.Button.
-        self.btn_ingresar = ttk.Button(self.root, text="Ingresar", command=self.procesar_login)
-        self.btn_ingresar.pack(pady=20)
+        lbl_sub = ttk.Label(
+            frame,
+            text="Ingrese sus credenciales de acceso",
+            foreground=COLOR_TEXTO_MUTED
+        )
+        lbl_sub.pack(pady=(0, 20))
 
-    def procesar_login(self):
-        # 1. Capturamos lo que el usuario escribió.
-        usuario_tipeado = self.entry_usuario.get()
-        password_tipeada = self.entry_password.get()
+        # Campo Usuario
+        ttk.Label(frame, text="Usuario:").pack(anchor="w", pady=(0, 2))
+        entry_user = ttk.Entry(frame, textvariable=self.var_usuario, width=32)
+        entry_user.pack(pady=(0, 12), fill="x", ipady=3)
+        entry_user.focus_set()
 
-        if not usuario_tipeado or not password_tipeada:
-            messagebox.showwarning("Atención", "Completá todos los campos.")
+        # Campo Contraseña
+        ttk.Label(frame, text="Contraseña:").pack(anchor="w", pady=(0, 2))
+        entry_pass = ttk.Entry(frame, textvariable=self.var_password, show="*", width=32)
+        entry_pass.pack(pady=(0, 20), fill="x", ipady=3)
+        entry_pass.bind("<Return>", lambda _event: self.intentar_login())
+
+        # Botón de Ingreso (Corregido a ipady=6)
+        btn_login = ttk.Button(frame, text="Ingresar al Sistema", command=self.intentar_login)
+        btn_login.pack(fill="x", ipady=6)
+
+    def intentar_login(self):
+        """Valida las credenciales ingresadas y efectúa el salto al panel principal."""
+        username = self.var_usuario.get().strip()
+        password = self.var_password.get().strip()
+
+        if not username or not password:
+            messagebox.showwarning("Campos Incompletos", "Por favor, ingrese usuario y contraseña.")
             return
 
-        # 2. Consultamos a la capa de Infraestructura.
-        repo = RepoCore()
-        usuario_validado = repo.autenticar_usuario(usuario_tipeado, password_tipeada)
+        # Validación segura mediante infraestructura Core
+        try:
+            usuario_valido = RepoCore.autenticar(username, password)
+        except Exception as e:
+            messagebox.showerror("Error de Conexión", f"No se pudo verificar la autenticación: {e}")
+            return
 
-        # 3. Lógica de validación visual.
-        if usuario_validado:
-            messagebox.showinfo("Éxito", f"Bienvenido, {usuario_validado.username}")
-            # Acá en la Semana 5 llamaremos al orquestador para abrir el 'ui_panel.py'.
-            self.root.destroy() 
+        if usuario_valido:
+            messagebox.showinfo("Éxito", f"¡Bienvenido/a, {usuario_valido.username}!")
+            self.root.destroy()  # Cierra la ventana de login
+
+            # Abre el Panel Principal corporativo pasando el objeto de usuario autenticado
+            root_panel = tk.Tk()
+            PanelPrincipal(root_panel, usuario_actual=usuario_valido)
+            root_panel.mainloop()
         else:
-            self.intentos_fallidos += 1
-            intentos_restantes = 3 - self.intentos_fallidos
-            
-            if self.intentos_fallidos >= 3:
-                # MODIFICADO: ttk.Button usa state(['disabled']) en lugar de config(state=tk.DISABLED).
-                self.btn_ingresar.state(['disabled'])
-                messagebox.showerror("Bloqueo", "Sistema bloqueado por seguridad. Hablá con el Administrador.")
-            else:
-                messagebox.showerror("Error", f"Credenciales incorrectas. Te quedan {intentos_restantes} intentos.")
-
-
-
-# ==============================================================================================
-#  ⚠️ ATENCIÓN ALICIA Y URIEL (CÓMO DEBEN ARMAR SUS VISTAS):
-# ==============================================================================================
-#
-#  Cuando programen ui_empleados.py, ui_facturacion.py, etc., respeten esto:
-#
-#  1. SEPARACIÓN DE RESPONSABILIDADES:
-#     - Este archivo SOLO dibuja ventanas y captura eventos (clicks, tipeo).
-#     - Está PROHIBIDO importar SQLite acá. La vista no sabe que existe una base de datos.
-#     - Toda consulta a la base de datos se hace llamando al Repositorio (o Controlador).
-#
-#  2. ESTRUCTURA ORIENTADA A OBJETOS:
-#     - Metan sus pantallas adentro de una Clase (ej. class VentanaClientes).
-#     - Separen el dibujo de la interfaz (Labels, Buttons, Treeviews) de las 
-#       funciones lógicas (procesar_guardado, calcular_total), para que el código quede limpio.
-# ==============================================================================================
-
-# Código para probar la ventana suelta durante el desarrollo:
-if __name__ == "__main__":
-    app = tk.Tk()
-    aplicar_estilos_base(app) # AGREGADO: Aplicamos los estilos antes de construir la ventana.
-    ventana = VentanaLogin(app)
-    app.mainloop()
+            messagebox.showerror("Acceso Denegado", "Usuario o contraseña incorrectos.")

@@ -68,12 +68,13 @@ CREATE TABLE IF NOT EXISTS clientes (
 );
 
 -- 6. TABLA PROVEEDORES
--- Hereda de 'personas'.
+-- Hereda de 'personas' e incluye la columna activo para la baja lógica.
 CREATE TABLE IF NOT EXISTS proveedores (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     id_persona INTEGER NOT NULL UNIQUE,
     rubro TEXT,
     contacto_secundario TEXT,
+    activo INTEGER DEFAULT 1,
     FOREIGN KEY (id_persona) REFERENCES personas(id) ON DELETE CASCADE
 );
 

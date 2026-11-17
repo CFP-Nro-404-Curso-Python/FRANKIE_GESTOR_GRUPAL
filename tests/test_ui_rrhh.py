@@ -249,7 +249,7 @@ class TestUIRRHHYHaberes(unittest.TestCase):
         self.assertGreater(liq["neto"], 0, "El neto a cobrar debe ser mayor a 0.")
 
         # Descomentar 'self.root.mainloop()' para pausar el test y revisar la ventana en pantalla
-        self.root.mainloop()
+        # self.root.mainloop()
 
 
 if __name__ == "__main__":

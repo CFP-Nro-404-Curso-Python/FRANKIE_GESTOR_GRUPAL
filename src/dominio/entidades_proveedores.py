@@ -1,47 +1,46 @@
 """
 ===============================================================================
-ENTIDAD DE DOMINIO: PROVEEDOR (dominio/entidades_proveedores.py)
+MÓDULO DE DOMINIO: ENTIDADES DE PROVEEDORES (src/dominio/entidades_proveedores.py)
 ===============================================================================
-Modelo de datos puro que representa a un proveedor o suministrador comercial
-dentro del sistema de gestión "Frankie".
+Modela el proveedor comercial integrando la herencia de personas, datos fiscales
+y propiedades de compatibilidad para la interfaz gráfica.
 ===============================================================================
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 
 @dataclass
 class Proveedor:
-    """
-    Entidad que encapsula los datos comerciales, fiscales y de contacto de un proveedor,
-    compatible con la herencia de la tabla 'personas' en 3FN.
-    """
+    """ Representa un Proveedor / Acreedor dentro del sistema comercial. """
     razon_social: str
-    nro_documento: str
-    rubro: str = ""
-    telefono: str = ""
-    email: str = ""
-    contacto_secundario: str = ""
+    rubro: str
+    tipo_documento: str = "CUIT"
+    nro_documento: str = ""
+    contacto_secundario: Optional[str] = None
+    telefono: Optional[str] = None
+    email: Optional[str] = None
+    domicilio: Optional[str] = None
+    ciudad: Optional[str] = None
+    provincia: Optional[str] = None
+    codigo_postal: Optional[str] = None
     tipo_persona: str = "Juridica"
     nombres: Optional[str] = None
     apellidos: Optional[str] = None
-    tipo_documento: str = "CUIT"
-    domicilio: str = ""
-    ciudad: str = ""
-    provincia: str = ""
-    codigo_postal: str = ""
     id: Optional[int] = None
     id_persona: Optional[int] = None
-
-    @property
-    def id_proveedor(self) -> Optional[int]:
-        """Alias retrocompatible para la capa visual."""
-        return self.id
+    activo: bool = True
 
     @property
     def nombre_comercial(self) -> str:
-        """Retorna la razón social o nombre comercial del proveedor."""
-        if self.razon_social and self.razon_social.strip():
-            return self.razon_social.strip()
-        return f"{self.nombres or ''} {self.apellidos or ''}".strip()
+        """
+        Propiedad inteligente: Retorna la razón social si es jurídica,
+        o el apellido y nombre si es persona física.
+        """
+        if self.tipo_persona == "Fisica":
+            return f"{self.apellidos or ''}, {self.nombres or ''}".strip(", ")
+        return self.razon_social or ""
+
+    def __str__(self) -> str:
+        return f"{self.nombre_comercial} (Rubro: {self.rubro})"

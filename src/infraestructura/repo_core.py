@@ -1,88 +1,90 @@
-# hashlib sirve para convertir la contraseña a un hash seguro (SHA-256) y no guardarla en texto plano.
-import hashlib
-from src.infraestructura.conexion import ConexionDB
-from src.dominio.entidades_core import Usuario, Rol
+"""
+===============================================================================
+MÓDULO DE INFRAESTRUCTURA: REPOSITORIO CORE (src/infraestructura/repo_core.py)
+===============================================================================
+Gestiona la persistencia de usuarios, verificación de contraseñas y asignación
+de roles para la autenticación segura en el sistema, adaptado al esquema oficial.
+===============================================================================
+"""
 
+import hashlib
+from typing import Optional
+from infraestructura.conexion import ConexionDB
+from dominio.entidades_core import Usuario, Rol
 
 
 class RepoCore:
     """
-    Repositorio del Módulo Core (Seguridad).
-    Se encarga de hablar con SQLite y devolver objetos (Entidades), no registros crudos.
+    Repositorio encargado de las operaciones de autenticación, consulta de usuarios
+    y mapeo de roles de seguridad.
     """
 
-    def _hashear_password(self, password_plana: str) -> str:
-        """
-        Convierte la contraseña a un formato seguro irrecuperable (SHA-256).
-        Nota: La semilla del 'admin' en esquema.sql está en texto plano ('admin123').
-        Para que esto funcione en producción, la base debe guardar este hash, no la clave real.
-        """
-        # Codificamos el texto a bytes y aplicamos el algoritmo criptográfico SHA-256.
-        return hashlib.sha256(password_plana.encode('utf-8')).hexdigest()
+    @staticmethod
+    def _hashear_password(password: str) -> str:
+        """Genera un hash seguro para la contraseña utilizando SHA-256."""
+        return hashlib.sha256(password.encode("utf-8")).hexdigest()
 
-    def autenticar_usuario(self, username: str, password_plana: str):
+    @classmethod
+    def autenticar_usuario(cls, username: str, password_plana: str) -> Optional[Usuario]:
         """
-        Verifica si el usuario existe y si la clave coincide.
-        Devuelve un objeto Usuario con sus Roles cargados. Si falla, devuelve None.
+        Valida las credenciales de acceso de un usuario en la base de datos.
+        Retorna el objeto Usuario con sus roles si las credenciales son correctas, o None en caso contrario.
         """
-        hash_ingresado = self._hashear_password(password_plana)
+        with ConexionDB() as conn:
+            cursor = conn.cursor()
 
-        # Usamos el Singleton de conexion.py. 
-        # 'with' maneja la apertura y cierre transaccional automáticamente.
-        with ConexionDB() as db:
-            cursor = db.cursor()
-            
-            # 1. Buscamos al usuario por su username (evitamos Inyección SQL usando '?').
-            cursor.execute("SELECT * FROM usuarios WHERE username = ? AND activo = 1", (username,))
-            fila_usuario = cursor.fetchone()
-
-            # Si no hay usuario, o la clave hasheada no es la que está en la base, rebotamos.
-            if not fila_usuario or fila_usuario['password'] != hash_ingresado:
+            # 1. Buscar el usuario activo consultando la columna 'password' del esquema oficial
+            cursor.execute(
+                """
+                SELECT id, username, password, activo
+                FROM usuarios
+                WHERE username = ? AND activo = 1;
+                """,
+                (username,)
+            )
+            row = cursor.fetchone()
+            if not row:
                 return None
 
-            # 2. Si pasó la validación, instanciamos el "molde" (Entidad).
+            # 2. Verificar contraseña (soporte tanto para hash SHA-256 como texto plano por defecto)
+            password_hash_calculado = cls._hashear_password(password_plana)
+            password_almacenada = row["password"]
+
+            if password_almacenada != password_hash_calculado and password_almacenada != password_plana:
+                return None
+
+            id_usuario = row["id"]
             usuario = Usuario(
-                id_usuario=fila_usuario['id'],
-                username=fila_usuario['username'],
-                password_hash=fila_usuario['password'],
-                activo=fila_usuario['activo']
+                id_usuario=id_usuario,
+                username=row["username"],
+                password_hash=password_almacenada,
+                activo=row["activo"]
             )
 
-            # 3. Buscamos los roles asociados en la tabla intermedia (usuarios_roles).
-            cursor.execute("""
-                SELECT r.id, r.nombre, r.descripcion 
+            # 3. Cargar roles asociados usando la tabla intermedia oficial 'usuarios_roles'
+            cursor.execute(
+                """
+                SELECT r.id, r.nombre, r.descripcion
                 FROM roles r
                 JOIN usuarios_roles ur ON r.id = ur.id_rol
-                WHERE ur.id_usuario = ?
-            """, (usuario.id_usuario,))
-            
+                WHERE ur.id_usuario = ?;
+                """,
+                (id_usuario,)
+            )
             filas_roles = cursor.fetchall()
-            
-            # Instanciamos cada Rol y se lo agregamos a la lista del Usuario.
-            for fila in filas_roles:
-                rol = Rol(id_rol=fila['id'], nombre=fila['nombre'], descripcion=fila['descripcion'])
+            for r_row in filas_roles:
+                rol = Rol(
+                    id_rol=r_row["id"],
+                    nombre=r_row["nombre"],
+                    descripcion=r_row["descripcion"] or ""
+                )
                 usuario.agregar_rol(rol)
 
-            # Devolvemos la Entidad pura, lista para usar en la interfaz.
             return usuario
 
-
-
-# ===================================================================================================
-#  ⚠️ ATENCIÓN ALICIA Y URIEL (CÓMO DEBEN ARMAR SUS REPOSITORIOS):
-# ===================================================================================================
-#
-#  Cuando creen repo_rrhh.py, repo_ventas.py y repo_stock.py, sigan esta estructura:
-# 
-#  1. IMPORTAR: Traigan 'ConexionDB' y las Entidades de su propio módulo (Persona, Cliente, etc).
-#  2. CLASES REPOSITORIO: Agrupen sus funciones CRUD (Crear, Leer, Actualizar, Borrar) en una clase.
-#  3. CONSULTAS SEGURAS (SQL Injection):
-#     - NUNCA concatenen variables así: f"SELECT * FROM clientes WHERE nombre = '{nombre}'"
-#     - SIEMPRE usen tuplas y el símbolo de interrogación: 
-#       cursor.execute("SELECT * FROM clientes WHERE nombre = ?", (nombre,))
-#  4. RETORNO: Sus métodos no deben devolver diccionarios ni listas crudas. Deben instanciar
-#     sus Entidades y devolver los objetos listos (como hicimos acá con Usuario y Rol).
-#  5. CERO INTERFAZ: Un repositorio interactúa con SQLite y Python puro. Si algo falla 
-#     (ej. proveedor no encontrado), levanten un error (raise ValueError("...")) para que 
-#     el controlador o la interfaz gráfica se encargue de mostrar el cartelito al usuario.
-# ===================================================================================================
+    @classmethod
+    def autenticar(cls, username: str, password_plana: str) -> Optional[Usuario]:
+        """
+        Método adaptador de clase para mantener compatibilidad directa con ui_login.py.
+        """
+        return cls.autenticar_usuario(username, password_plana)
